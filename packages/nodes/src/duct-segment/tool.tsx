@@ -3,12 +3,15 @@
 import {
   type AnyNode,
   type CeilingNode,
+  DUCT_CLEARANCE_MM,
   type DuctFittingNode,
   DuctSegmentNode,
   emitter,
   type GridEvent,
   getCeilingAt,
   getCeilingHeightAt,
+  getStoredLevelHeight,
+  type LevelNode,
   resolveCeilingHeight,
   useScene,
 } from '@pascal-app/core'
@@ -87,10 +90,12 @@ import { ductPortDiameterIn, rectSectionAxes, rollToContinueAcrossElbow } from '
  *     vertical mouse motion drives Y. Click commits the riser segment.
  *   - **[ / ]** step the duct diameter through the GOST R 70349 round
  *     row; the ghost preview and the committed node both use it.
- *   - **C** toggles ceiling-level placement: each point lands just below
- *     the ceiling actually covering it (duct top hugging that ceiling)
- *     instead of the floor, so a run tracks per-room ceiling heights.
- *     Points not under any ceiling fall back to the floor.
+ *   - **C** toggles ceiling routing (default ON — СП 60/СП 73: воздуховоды
+ *     прокладываются под потолком/перекрытием, не по полу). Each point lands
+ *     just below the ceiling actually covering it (or the level top when none
+ *     covers it) with the normative `DUCT_CLEARANCE_MM` clearance from the
+ *     slab, so a run tracks per-room ceiling heights. Floor placement is for
+ *     risers / special runs.
  *   - Esc clears an anchored start point.
  */
 const PREVIEW_OPACITY = 0.55
@@ -521,9 +526,12 @@ const DuctSegmentTool = () => {
   })
   const [draftPoints, setDraftPoints] = useState<Array<[number, number, number]>>([])
   const [cursorPos, setCursorPos] = useState<[number, number, number] | null>(null)
-  // Ceiling mode (toggle with C): the first point lands at the level's
-  // ceiling height (duct top hugging the ceiling) instead of the floor.
-  const [ceilingMode, setCeilingMode] = useState(false)
+  // Ceiling routing mode (default ON — СП 60/СП 73: воздуховоды прокладываются
+  // под потолком/перекрытием, а не по полу; toggle with C to lay on the floor
+  // for risers or special runs): every point lands just below the ceiling or
+  // level top actually covering it, with the normative clearance
+  // `DUCT_CLEARANCE_MM` between the duct top and the slab.
+  const [ceilingMode, setCeilingMode] = useState(true)
   // The shared coordinate when the cursor is within snap range of an existing
   // duct (null = free placement). Drives the green cursor highlight so the
   // user sees the next click will join an existing run, not freeform-place.
@@ -643,20 +651,27 @@ const DuctSegmentTool = () => {
       setAltActive(false)
     }
 
-    // Y for a point at level-local `[x, z]`. Floor (0) when ceiling mode is
-    // off. In ceiling mode, query the ceiling actually covering that point
-    // and hang the duct just below it (centerline = ceiling underside −
-    // half the duct's vertical dimension) so its top hugs the ceiling. Each
-    // point follows its own ceiling, so a run stepping into a room with a
-    // different ceiling height tracks that change. Points not under any
-    // ceiling fall back to the floor.
+    // Y for a point at level-local `[x, z]`. Ceiling routing is the default
+    // (normative — СП 60/СП 73: ducts hang under the ceiling/slab, not on the
+    // floor): query the ceiling actually covering that point and hang the duct
+    // just below it with the `DUCT_CLEARANCE_MM` clearance from the slab
+    // (centerline = ceiling underside − clearance − half the duct's vertical
+    // dimension). Points not under any ceiling use the level's storey top with
+    // the same clearance (ducts still route overhead, never on the floor).
+    // Each point follows its own ceiling, so a run stepping into a room with a
+    // different ceiling height tracks that change. Floor routing (Alt/C toggle,
+    // risers, special runs) returns 0.
     const resolveCeilingY = (x: number, z: number): number => {
       if (!ceilingModeRef.current) return 0
-      const ceiling = getCeilingHeightAt(activeLevelId, useScene.getState().nodes, x, z)
-      if (ceiling === null) return 0
+      const clearanceM = (DUCT_CLEARANCE_MM.min + DUCT_CLEARANCE_MM.max) / 2 / 1000
       const p = profileRef.current
       const verticalM = p.shape === 'round' ? p.diameter / 1000 : p.height / 1000
-      return Math.max(0, ceiling - verticalM / 2)
+      const ceiling = getCeilingHeightAt(activeLevelId, useScene.getState().nodes, x, z)
+      const level = useScene.getState().nodes[activeLevelId as LevelNode['id']] as
+        | LevelNode
+        | undefined
+      const topY = ceiling ?? getStoredLevelHeight({ height: level?.height })
+      return Math.max(0, topY - clearanceM - verticalM / 2)
     }
 
     const resolveSnappedPoint = (
@@ -903,10 +918,11 @@ const DuctSegmentTool = () => {
         setProfile((p) => ({ ...p, shape: p.shape === 'round' ? 'rect' : 'round' }))
         triggerSFX('sfx:grid-snap')
       } else if (e.key === 'c' || e.key === 'C') {
-        // Toggle ceiling mode: points hang from the ceiling above them
-        // (duct top hugging the ceiling) instead of sitting on the floor.
-        // Only flip while unanchored — already-placed points keep their Y,
-        // so a mid-run toggle would split a run across two height regimes.
+        // Toggle ceiling routing: default ON hangs runs under the ceiling /
+        // slab (normative), C switches to floor placement for risers or
+        // special runs. Only flip while unanchored — already-placed points
+        // keep their Y, so a mid-run toggle would split a run across two
+        // height regimes.
         if (draftRef.current.length > 0) return
         e.preventDefault()
         setCeilingMode((m) => !m)

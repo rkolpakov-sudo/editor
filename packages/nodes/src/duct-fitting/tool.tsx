@@ -1,6 +1,15 @@
 'use client'
 
-import { DuctFittingNode, emitter, type GridEvent, useScene } from '@pascal-app/core'
+import {
+  DUCT_CLEARANCE_MM,
+  DuctFittingNode,
+  emitter,
+  type GridEvent,
+  getCeilingHeightAt,
+  getStoredLevelHeight,
+  type LevelNode,
+  useScene,
+} from '@pascal-app/core'
 import {
   CursorSphere,
   EDITOR_LAYER,
@@ -49,7 +58,9 @@ type Placement = {
  *   - Near an existing port → mate: orientation aligns the inlet onto
  *     the port (plus the user's manual R/T rotation, pivoting around
  *     the inlet collar so it stays on the port while the body sweeps).
- *   - Otherwise → grid-snapped free placement on the floor, manual
+ *   - Otherwise → grid-snapped free placement at duct routing height
+ *     (under the ceiling / level top with the normative clearance —
+ *     fittings hang with the duct runs, not on the floor), manual
  *     rotation only.
  */
 function resolvePlacement(
@@ -57,6 +68,7 @@ function resolvePlacement(
   previewNode: DuctFittingNode,
   gridStep: number,
   manualQuat: Quaternion,
+  activeLevelId: string,
 ): Placement {
   const port = findNearestPortXZ(
     raw,
@@ -81,8 +93,17 @@ function resolvePlacement(
     }
   }
   const euler = new Euler().setFromQuaternion(manualQuat)
+  // Free placement routes the fitting at duct height — under the ceiling or
+  // level top with the normative DUCT_CLEARANCE_MM, never on the floor.
+  const clearanceM = (DUCT_CLEARANCE_MM.min + DUCT_CLEARANCE_MM.max) / 2 / 1000
+  const verticalM =
+    previewNode.shape === 'round' ? previewNode.diameter / 1000 : previewNode.height / 1000
+  const ceiling = getCeilingHeightAt(activeLevelId, useScene.getState().nodes, raw[0], raw[2])
+  const level = useScene.getState().nodes[activeLevelId as LevelNode['id']] as LevelNode | undefined
+  const topY = ceiling ?? getStoredLevelHeight({ height: level?.height })
+  const y = Math.max(0, topY - clearanceM - verticalM / 2)
   return {
-    position: [snap(raw[0], gridStep), 0, snap(raw[2], gridStep)],
+    position: [snap(raw[0], gridStep), y, snap(raw[2], gridStep)],
     rotation: [euler.x, euler.y, euler.z],
     snapPort: null,
   }
@@ -147,6 +168,7 @@ const DuctFittingTool = () => {
           previewNode,
           isGridSnapActive() ? useEditor.getState().gridSnapStep : 0,
           manualQuatRef.current,
+          activeLevelId,
         ),
       )
     }
@@ -163,6 +185,7 @@ const DuctFittingTool = () => {
         previewNode,
         isGridSnapActive() ? useEditor.getState().gridSnapStep : 0,
         manualQuatRef.current,
+        activeLevelId,
       )
       const fitting = DuctFittingNode.parse({
         ...ductFittingDefinition.defaults(),
