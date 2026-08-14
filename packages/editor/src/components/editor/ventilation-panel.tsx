@@ -1,6 +1,6 @@
 'use client'
 
-import type { AnyNode, AnyNodeId, DuctNetwork, ZoneNode } from '@pascal-app/core'
+import type { AnyNode, AnyNodeId, DuctNetwork, WallNode, ZoneNode } from '@pascal-app/core'
 import {
   assignZoneAirflowsToTerminals,
   buildDuctNetworks,
@@ -291,9 +291,24 @@ function VentilationContent() {
   const markings = useMemo(() => planSystemMarkings(nodes), [nodes])
   const bypass = useMemo(() => planAllBypasses(nodes), [nodes])
   const findings = useMemo(() => validateDuctNetwork(nodes), [nodes])
+  // Этап 10: сетевой подбор (Этап 8) привязывается к строкам спецификации.
+  const sizing = useMemo(() => {
+    const zones = Object.values(nodes).filter(
+      (node): node is ZoneNode => node?.type === 'zone' && node.spaceRole === 'room',
+    )
+    const assignments = assignZoneAirflowsToTerminals(nodes, zones)
+    const flows = computeNetworkFlows(nodes, {
+      terminalFlows: terminalFlowMap(assignments),
+    })
+    return sizeDuctNetworks(nodes, { flows })
+  }, [nodes])
+  const walls = useMemo(
+    () => Object.values(nodes).filter((node): node is WallNode => node?.type === 'wall'),
+    [nodes],
+  )
   const specification = useMemo(
-    () => buildDuctSpecification(nodes, { markings }),
-    [nodes, markings],
+    () => buildDuctSpecification(nodes, { markings, sizing }),
+    [nodes, markings, sizing],
   )
 
   const hasDucts = networks.length > 0
@@ -325,7 +340,7 @@ function VentilationContent() {
   const handleExportDxf = () => {
     handleDownload(
       `ventilation_plan_${new Date().toISOString().split('T')[0]}.dxf`,
-      ductsToDxf(nodes, { markings }),
+      ductsToDxf(nodes, { markings, walls }),
       'application/dxf',
     )
   }

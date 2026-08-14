@@ -69,17 +69,19 @@ export function registerMepExportTools(server: McpServer, bridge: SceneOperation
     {
       title: 'MEP plan DXF',
       description:
-        'Export the ventilation floor plan as ASCII DXF: duct runs on system layers (П supply / В exhaust / Р return), fittings as circles, terminals as squares, and П1/В1/Р1 marking labels per ГОСТ 21.602.',
+        'Export the ventilation floor plan as ASCII DXF: duct runs on system layers (П supply / В exhaust / Р return), fittings drawn by type (elbow arcs, offset утка S-polyline, tee/cross lines, reducers), wall sleeves and fire dampers at penetrations, П1/В1/Р1 marking labels and a system legend per ГОСТ 21.602.',
       inputSchema: mepDxfInput,
       outputSchema: mepDxfOutput,
     },
     async (input) => {
       const nodes = bridge.getNodes() as Readonly<Record<AnyNodeId, AnyNode>>
+      const walls = Object.values(nodes).filter((node) => node?.type === 'wall')
       const dxf = ductsToDxf(nodes, {
         labelHeightM: input?.labelHeightM,
         drawFittings: input?.drawFittings,
         drawTerminals: input?.drawTerminals,
         markings: planSystemMarkings(nodes),
+        walls,
       })
       const date = new Date().toISOString().split('T')[0]
       const payload = {
@@ -88,8 +90,17 @@ export function registerMepExportTools(server: McpServer, bridge: SceneOperation
         entityCount:
           (dxf.match(/\n0\nLINE\n/g) ?? []).length +
           (dxf.match(/\n0\nCIRCLE\n/g) ?? []).length +
+          (dxf.match(/\n0\nARC\n/g) ?? []).length +
           (dxf.match(/\n0\nTEXT\n/g) ?? []).length,
-        layers: ['MEP_SUPPLY', 'MEP_EXHAUST', 'MEP_RETURN', 'MEP_FITTING', 'MEP_TERMINAL'],
+        layers: [
+          'MEP_SUPPLY',
+          'MEP_EXHAUST',
+          'MEP_RETURN',
+          'MEP_FITTING',
+          'MEP_TERMINAL',
+          'MEP_SLEEVE',
+          'MEP_FIRE_DAMPER',
+        ],
       }
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload) }],

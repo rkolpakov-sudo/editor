@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { AnyNode, AnyNodeId } from '../schema'
 import { DuctFittingNode, DuctSegmentNode, DuctTerminalNode, WallNode } from '../schema'
+import type { NetworkSizingResult } from './network-sizing'
 import { buildDuctSpecification, specificationToCsv, specificationToText } from './specification'
 
 type Point = [number, number, number]
@@ -283,6 +284,88 @@ describe('buildDuctSpecification', () => {
     expect(spec.totals.lengthM).toBe(0)
     expect(spec.warnings).toHaveLength(0)
   })
+
+  test('duct rows carry per-group mass and surface it in the note (Этап 10)', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2, 0],
+          [4, 2, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply', diameter: 200 },
+      ),
+    )
+    const spec = buildDuctSpecification(scene)
+    const row = spec.sections.ducts.find((r) => r.name === 'Воздуховод круглый Ø200')
+    expect(row).not.toBeUndefined()
+    // Perimeter π·0.2 m × 4 m × 0.8 mm × 7850 kg/m³ ≈ 15.8 kg.
+    expect(row!.massKg).toBeGreaterThan(10)
+    expect(row!.massKg).toBeLessThan(25)
+    expect(row!.size).toBe('Ø200')
+    expect(row!.note).toContain('Масса:')
+    expect(spec.totals.massKg).toBeCloseTo(row!.massKg!, 5)
+  })
+
+  test('fitting rows group by type + size; different sizes stay separate (Этап 10)', () => {
+    const scene = sceneOf(
+      fitting({ id: 'duct-fitting_f1', fittingType: 'elbow', angle: 90, diameter: 200 }),
+      fitting({ id: 'duct-fitting_f2', fittingType: 'elbow', angle: 90, diameter: 200 }),
+      fitting({ id: 'duct-fitting_f3', fittingType: 'elbow', angle: 90, diameter: 315 }),
+    )
+    const spec = buildDuctSpecification(scene)
+    const elbows200 = spec.sections.fittings.find((r) => r.name === 'Отвод 90° Ø200 R=1.5D')
+    expect(elbows200!.quantity).toBe(2)
+    expect(elbows200!.size).toBe('Ø200')
+    const elbows315 = spec.sections.fittings.find((r) => r.name === 'Отвод 90° Ø315 R=1.5D')
+    expect(elbows315!.quantity).toBe(1)
+    expect(elbows315!.size).toBe('Ø315')
+    // The two Ø200 elbows were grouped into one row, not a separate row each.
+    expect(spec.sections.fittings.filter((r) => r.name === 'Отвод 90° Ø200 R=1.5D')).toHaveLength(1)
+  })
+
+  test('duct rows link network sizing: flow, velocity, sized profile (Этап 10)', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2, 0],
+          [2.5, 2, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply' },
+      ),
+    )
+    const sizing: NetworkSizingResult[] = [
+      {
+        networkIndex: 0,
+        systems: ['supply'],
+        totalFlowM3h: 90,
+        warnings: [],
+        segments: [
+          {
+            segmentId: 'duct-segment_s1' as AnyNodeId,
+            networkIndex: 0,
+            system: 'supply',
+            flowM3h: 90,
+            currentProfile: { shape: 'round', diameterMm: 160 },
+            profile: { shape: 'round', diameterMm: 100 },
+            velocityMps: 3.2,
+            inNormBand: true,
+            noiseCheckRequired: false,
+            frictionDropPa: 4.5,
+            lengthM: 2.5,
+          },
+        ],
+      },
+    ]
+    const spec = buildDuctSpecification(scene, { sizing })
+    const row = spec.sections.ducts.find((r) => r.name === 'Воздуховод круглый Ø160')
+    expect(row!.flowM3h).toBe(90)
+    expect(row!.velocityMps).toBeCloseTo(3.2, 5)
+    expect(row!.sizedLabel).toBe('Ø100')
+    expect(row!.note).toContain('Q = 90 м³/ч')
+    expect(row!.note).toContain('v = 3,2 м/с')
+    expect(row!.note).toContain('подбор: Ø100')
+    expect(row!.note).toContain('ΔP = 4,5 Па')
+  })
 })
 
 describe('specificationToCsv', () => {
@@ -317,16 +400,33 @@ describe('specificationToCsv', () => {
       ),
     )
     const csv = specificationToCsv(buildDuctSpecification(scene))
-    // Every line must have exactly 8 columns when split on top-level ';'.
+    // Split respecting double-quoted cells (CSV rules): a `;` inside quotes
+    // is data, not a separator.
+    const splitCells = (line: string): string[] => {
+      const cells: string[] = []
+      let current = ''
+      let inQuotes = false
+      for (let i = 0; i < line.length; i += 1) {
+        const char = line[i]!
+        if (char === '"' && line[i + 1] === '"') {
+          current += '"'
+          i += 1
+        } else if (char === '"') {
+          inQuotes = !inQuotes
+        } else if (char === ';' && !inQuotes) {
+          cells.push(current)
+          current = ''
+        } else {
+          current += char
+        }
+      }
+      cells.push(current)
+      return cells
+    }
+    // Every data line must have exactly 8 top-level columns.
     for (const line of csv.trim().split('\n')) {
       if (line.startsWith('[') || line.startsWith(';')) continue
-      const outsideQuotes = line.split(';').filter((_, i, arr) => {
-        // crude balance check: count quotes per cell
-        const cell = line.split(';')[i]!
-        return !cell.includes('"')
-      })
-      void outsideQuotes
-      expect(line.split(';')).toHaveLength(8)
+      expect(splitCells(line)).toHaveLength(8)
     }
   })
 })

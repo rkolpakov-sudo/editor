@@ -8,6 +8,7 @@ import type {
 import { type DuctSectionProfile, ductSectionPerimeterM } from './aerodynamics'
 import { DUCT_SEGMENT_LENGTHS_M } from './constants'
 import { planGostSegmentation } from './gost-segmentation'
+import type { NetworkSizingResult, SizedDuctSection } from './network-sizing'
 import type { SystemType } from './norms-types'
 import {
   checkFireBarrierCrossing,
@@ -46,6 +47,16 @@ export type DuctSpecItem = {
   quantity: number
   /** Суммарная длина, м (для воздуховодов). */
   lengthM?: number
+  /** Размер для группировки (Ø160, 400×200) — фиттинги, воздуховоды. */
+  size?: string
+  /** Масса группы, кг = периметр × длина × δ × ρ (Этап 10). */
+  massKg?: number
+  /** Суммарный расход группы из сетевого расчёта, м³/ч (Этап 10). */
+  flowM3h?: number
+  /** Средняя скорость по подобранным сечениям, м/с (Этап 10). */
+  velocityMps?: number
+  /** Подобранный профиль ГОСТ из сетевого подбора, напр. «Ø160». */
+  sizedLabel?: string
   /** Примечание — разбивка на звенья ГОСТ, свободные длины и т.п. */
   note?: string
 }
@@ -90,6 +101,9 @@ export type DuctSpecificationOptions = {
   fireRatedBarriers?: readonly WallLike[]
   /** Готовая маркировка сетей (см. `planSystemMarkings`); без неё — по буквам системы. */
   markings?: Readonly<Record<AnyNodeId, string>>
+  /** Сетевой подбор (`sizeDuctNetworks`, Этап 8) — привязывает расход,
+   *  подобранное сечение и потери к строкам воздуховодов (Этап 10). */
+  sizing?: readonly NetworkSizingResult[]
 }
 
 // ── Segment profile helpers ───────────────────────────────────────────────
@@ -128,6 +142,18 @@ function fittingBranchLabel(node: DuctFittingNode): string {
   return `${node.width2}×${node.height2}`
 }
 
+/** Ключ размера для группировки фиттингов (Этап 10): r200 / x400x200. */
+function fittingSizeKey(node: DuctFittingNode): string {
+  return node.shape === 'round' ? `r${node.diameter}` : `x${node.width}x${node.height}`
+}
+
+/** Подпись профиля ГОСТ: Ø160, 400×200. */
+function profileLabel(profile: DuctSectionProfile): string {
+  return profile.shape === 'round'
+    ? `Ø${profile.diameterMm}`
+    : `${profile.widthMm}×${profile.heightMm}`
+}
+
 /** Total polyline length of a segment, m. */
 function segmentLengthM(node: DuctSegmentNode): number {
   let total = 0
@@ -139,7 +165,7 @@ function segmentLengthM(node: DuctSegmentNode): number {
   return total
 }
 
-/** Supports on a (possibly bent) segment, counted per straight leg. */
+/** Support count per straight leg of a possibly-bent segment. */
 function segmentSupports(node: DuctSegmentNode, size: SegmentSize): number {
   let count = 0
   for (let i = 0; i < node.path.length - 1; i += 1) {
@@ -149,6 +175,41 @@ function segmentSupports(node: DuctSegmentNode, size: SegmentSize): number {
     count += supportCountForRun(legLength, node.shape, size.sizeMm)
   }
   return count
+}
+
+/** Агрегация сетевого подбора (Этап 8) для группы участков одного размера:
+ *  суммарный расход, расходо-взвешенная скорость, первое подобранное сечение
+ *  и суммарные потери. Null, когда сетевой подбор не передан. */
+function groupSizingStats(
+  segments: readonly DuctSegmentNode[],
+  sizedBySegment: ReadonlyMap<AnyNodeId, SizedDuctSection>,
+): {
+  flowM3h: number
+  velocityMps?: number
+  sizedLabel?: string
+  frictionDropPa: number
+} | null {
+  if (sizedBySegment.size === 0) return null
+  let flowM3h = 0
+  let flowWeightedVelocity = 0
+  let frictionDropPa = 0
+  let sizedLabel: string | undefined
+  for (const segment of segments) {
+    const sized = sizedBySegment.get(segment.id)
+    if (!sized) continue
+    frictionDropPa += sized.frictionDropPa
+    if (sized.flowM3h <= 0) continue
+    flowM3h += sized.flowM3h
+    flowWeightedVelocity += sized.flowM3h * sized.velocityMps
+    if (sizedLabel === undefined) sizedLabel = profileLabel(sized.profile)
+  }
+  if (flowM3h <= 0) return { flowM3h, frictionDropPa }
+  return {
+    flowM3h,
+    velocityMps: flowWeightedVelocity / flowM3h,
+    sizedLabel,
+    frictionDropPa,
+  }
 }
 
 // ── Main builder ──────────────────────────────────────────────────────────
@@ -219,6 +280,10 @@ export function buildDuctSpecification(
   options: DuctSpecificationOptions = {},
 ): DuctSpecification {
   const markings = options.markings ?? defaultMarkings(nodes)
+  const sizedBySegment = new Map<AnyNodeId, SizedDuctSection>()
+  for (const result of options.sizing ?? []) {
+    for (const segment of result.segments) sizedBySegment.set(segment.segmentId, segment)
+  }
   const segments: DuctSegmentNode[] = []
   const fittings: DuctFittingNode[] = []
   const terminals: DuctTerminalNode[] = []
@@ -338,6 +403,26 @@ export function buildDuctSpecification(
           ? 'прямоугольный'
           : 'плоско-овальный'
     const designation = `ГОСТ Р 70349 · ${group.size.label}`
+    const massKg =
+      ductSectionPerimeterM(group.size.profile) *
+      group.lengthM *
+      SPEC_SHEET_THICKNESS_M *
+      STEEL_DENSITY_KG_M3
+    const sizing = groupSizingStats(group.segments, sizedBySegment)
+    const notes: string[] = []
+    const piecesNote = formatPieces(pieces, customCount)
+    if (piecesNote) notes.push(piecesNote)
+    if (sizing && sizing.flowM3h > 0) {
+      const comma = (value: number) => value.toFixed(1).replace('.', ',')
+      notes.push(
+        `Q = ${sizing.flowM3h.toFixed(0)} м³/ч${
+          sizing.velocityMps !== undefined ? `, v = ${comma(sizing.velocityMps)} м/с` : ''
+        }${sizing.sizedLabel ? `, подбор: ${sizing.sizedLabel}` : ''}${
+          sizing.frictionDropPa > 0 ? `, ΔP = ${comma(sizing.frictionDropPa)} Па` : ''
+        }`,
+      )
+    }
+    if (massKg > 0) notes.push(`Масса: ${massKg.toFixed(1)} кг`)
     ductRows.push({
       pos: nextPos(),
       name: `Воздуховод ${shapeName} ${group.size.label}`,
@@ -346,7 +431,12 @@ export function buildDuctSpecification(
       unit: 'м',
       quantity: Math.round(group.lengthM * 1000) / 1000,
       lengthM: group.lengthM,
-      note: formatPieces(pieces, customCount) ?? undefined,
+      size: group.size.label,
+      massKg,
+      flowM3h: sizing && sizing.flowM3h > 0 ? sizing.flowM3h : undefined,
+      velocityMps: sizing?.velocityMps,
+      sizedLabel: sizing?.sizedLabel,
+      note: notes.length > 0 ? notes.join('; ') : undefined,
     })
     if (customCount > 0) {
       warnings.push(
@@ -382,7 +472,7 @@ export function buildDuctSpecification(
   }
   const fittingGroups = new Map<string, FittingGroup>()
   const pushFitting = (node: DuctFittingNode, name: string, designation: string) => {
-    const key = `${node.fittingType}|${node.system}|${name}`
+    const key = `${node.fittingType}|${node.system}|${fittingSizeKey(node)}|${name}`
     const entry = fittingGroups.get(key)
     if (entry) {
       entry.count += 1
@@ -448,6 +538,7 @@ export function buildDuctSpecification(
       system: entry.node.system,
       unit: 'шт',
       quantity: entry.count,
+      size: fittingSizeLabel(entry.node),
     })
   }
 
@@ -608,8 +699,17 @@ export function specificationToText(specification: DuctSpecification): string {
   ][]) {
     lines.push(`\n${SECTION_LABEL[section]}:`)
     for (const row of rows) {
+      const extra: string[] = []
+      if (row.flowM3h !== undefined && row.flowM3h > 0) {
+        extra.push(
+          `Q = ${row.flowM3h.toFixed(0)} м³/ч${
+            row.velocityMps !== undefined ? `, v = ${row.velocityMps.toFixed(1)} м/с` : ''
+          }${row.sizedLabel ? `, подбор: ${row.sizedLabel}` : ''}`,
+        )
+      }
+      if (row.massKg !== undefined) extra.push(`${row.massKg.toFixed(1)} кг`)
       lines.push(
-        `  ${row.pos}. ${row.name} — ${row.quantity} ${row.unit}${row.lengthM !== undefined ? ` (${row.lengthM.toFixed(2)} м)` : ''}`,
+        `  ${row.pos}. ${row.name} — ${row.quantity} ${row.unit}${row.lengthM !== undefined ? ` (${row.lengthM.toFixed(2)} м)` : ''}${extra.length > 0 ? ` — ${extra.join(', ')}` : ''}`,
       )
     }
   }
