@@ -11,18 +11,23 @@ import type {
  * СП 54, ГОСТ Р 70349, СП 73/СП 7.13130). Pure data, no store or React —
  * the source tables live in `docs/mep/00..04`.
  *
- * Verification flags: values marked with a flag have not been verified
- * against the paid full text of the norm (see `docs/mep/05-sources-log.md`)
- * and are working defaults until the source is obtained.
+ * Verification flags: `false` means the value is a working default pending
+ * the full norm text (see `docs/mep/05-sources-log.md`); `true` means the
+ * value was verified against the full norm text (sources cited inline).
  */
 
-/** Л.3 (residential) values come from a working default — the paid full
- *  text is unobtainable; replace on access. */
+/** Табл. Л.3 (жилые здания) — значения из практики (магистрали ≤5, ответвления
+ *  2–3 м/с), полный текст СП 60.13330.2020 платный и не получен; задокументировано
+ *  как допущение с обоснованием в `docs/mep/00`. Заменить при доступе к полному тексту. */
 export const TABLE_L3_VERIFIED = false
-/** Mounting spacings are typical values pending the full СП 73 text. */
-export const MOUNTING_SPACING_VERIFIED = false
-/** Fitting local-resistance coefficients (tee/transition ξ) are working
- *  values from reference literature, pending a normative source. */
+/** Шаг креплений воздуховодов — сверено с полным текстом СП 73.13330.2016
+ *  (п. 6.5.5, бандажное бесфланцевое соединение): размер < 400 мм → 4 м,
+ *  400 мм и более → 3 м для круглых и прямоугольных/овальных одинаково.
+ *  Фланцевые/ниппельные прямые участки допускают до 6 м (см. `routing-rules.ts`). */
+export const MOUNTING_SPACING_VERIFIED = true
+/** Локальные сопротивления фитингов (тройник/переход ξ) — рабочие значения из
+ *  справочной литературы; ξ отводов сверено с «Справочником проектировщика ОВиК»
+ *  (см. `aerodynamics.ts` ELBOW_ZETA), тройники/переходы ждут нормативного источника. */
 export const FITTING_ZETA_VERIFIED = false
 
 /** Max imbalance between branch pressure drops at a junction before the

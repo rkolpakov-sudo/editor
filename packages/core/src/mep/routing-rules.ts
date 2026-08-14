@@ -6,8 +6,9 @@ import type { DuctShape } from './norms-types'
  * or Three.js. The crossing primitives here are also the base the stage-4
  * bypass detection builds on.
  *
- * Values marked `MOUNTING_SPACING_VERIFIED = false` in `constants.ts` are
- * typical spacing pending the full (paid) СП 73 text.
+ * Mounting spacing is verified against СП 73.13330.2016 п. 6.5.5
+ * (`MOUNTING_SPACING_VERIFIED = true` in `constants.ts`); source: cntd
+ * `document/456029018` (see `docs/mep/03` and `05-sources-log.md`).
  */
 
 /** A point on the level's XZ plan, meters. */
@@ -38,12 +39,17 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-// ── Mounting (СП 73 typical spacing) ──────────────────────────────────────
+// ── Mounting (СП 73.13330.2016 п. 6.5.5) ─────────────────────────────────
 
-/** Support spacing for a duct by shape and body size, meters. */
-export function mountingSpacingM(shape: DuctShape, sizeMm: number): number {
-  if (shape === 'rect' || shape === 'oval') return 3
-  return sizeMm <= 400 ? 4 : 3
+/** Support spacing for a duct by body size, meters. Base rule for a
+ *  band/besflantsevoye connection (бандажное бесфланцевое), verified against
+ *  СП 73.13330.2016 п. 6.5.5: size (round diameter or the larger rect/oval
+ *  side) < 400 mm → 4 m; 400 mm and more → 3 m. `shape` is kept for the API —
+ *  the norm applies the same threshold to round and rectangular ducts alike.
+ *  (Flanged/nipple straight runs may reach 6 m per the same paragraph; not
+ *  modelled here — the base rule is the conservative default.) */
+export function mountingSpacingM(_shape: DuctShape, sizeMm: number): number {
+  return sizeMm < 400 ? 4 : 3
 }
 
 /** Number of supports on a straight run of the given length: floor(L/spacing)

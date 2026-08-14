@@ -10,12 +10,16 @@ import {
   wallBarrierRect,
 } from './routing-rules'
 
-describe('mounting rules (СП 73 typical spacing)', () => {
-  test('spacing by shape and round size', () => {
+describe('mounting rules (СП 73.13330.2016 п. 6.5.5)', () => {
+  test('spacing: size < 400 мм → 4 м, 400 мм и более → 3 м, любой формы', () => {
     expect(mountingSpacingM('round', 200)).toBe(4)
+    expect(mountingSpacingM('round', 399)).toBe(4)
+    expect(mountingSpacingM('round', 400)).toBe(3)
     expect(mountingSpacingM('round', 500)).toBe(3)
+    // the norm applies the same threshold to the larger side of rect/oval
+    expect(mountingSpacingM('rect', 300)).toBe(4)
     expect(mountingSpacingM('rect', 400)).toBe(3)
-    expect(mountingSpacingM('oval', 300)).toBe(3)
+    expect(mountingSpacingM('oval', 300)).toBe(4)
   })
 
   test('support count = floor(L/spacing) + 1', () => {

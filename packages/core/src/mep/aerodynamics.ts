@@ -109,8 +109,12 @@ export function ductSectionHydraulicDiameterM(profile: DuctSectionProfile): numb
 
 /**
  * Local resistance coefficients for elbows by turn angle and R/D factor.
- * Typical published values for round ducts (R/D = 1.0 / 1.5 / 2.0); the
- * source is standard duct-network aerodynamics reference literature.
+ * Values for round ducts (R/D = 1.0 / 1.5 / 2.0) from «Справочник
+ * проектировщика. Внутренние санитарно-технические устройства. Ч. 3.
+ * Вентиляция и кондиционирование воздуха» (под ред. И.Г. Староверова) —
+ * the primary ОВиК reference, tables for ξ of smooth round elbows
+ * (колено круглого сечения); Идельчик И.Е. «Справочник по
+ * гидравлическим сопротивлениям» gives the same order of magnitude.
  * Angles/radii between the tabulated points are linearly interpolated.
  */
 const ELBOW_ZETA: Record<number, Record<number, number>> = {
@@ -166,9 +170,10 @@ export function localPressureDropPa(
 }
 
 // ── Other fitting ξ (tee / transition) ────────────────────────────────────
-// Working values from duct-network reference literature — the full СП 60
-// appendix text is paid and the coefficients are flagged `_VERIFIED = false`
-// (see `docs/mep/05-sources-log.md`, stage 11 verifies them).
+// Working values from duct-network reference literature — no single
+// normative table covers them, so they are flagged `FITTING_ZETA_VERIFIED =
+// false` (see `docs/mep/05-sources-log.md`, stage 11 keeps them pending a
+// source; elbows above are the verified part).
 
 /** Local resistance coefficient ξ of a tee junction: the air either passes
  *  straight through the run (`viaBranch = false`, low ξ) or turns into the
