@@ -17,8 +17,8 @@
 
 | Область | Файлы | Состояние |
 |---|---|---|
-| Схема duct-segment | `packages/core/src/schema/nodes/duct-segment.ts` | path-полилиния [x,y,z] м; shape round/rect/oval; **размеры в дюймах** (diameter 2–48, width/height); system `supply\|return`; ductMaterial; roll |
-| Схема duct-fitting | `packages/core/src/schema/nodes/duct-fitting.ts` | fittingType elbow/tee/cross/reducer/transition; angle 0–90°; branchAngle; shape/shape2; **дюймы**; system `supply\|return` |
+| Схема duct-segment | `packages/core/src/schema/nodes/duct-segment.ts` | path-полилиния [x,y,z] м; shape round/rect/oval; **размеры в мм по ГОСТ Р 70349** (diameter Ø100–2000 def 160; width/height 100–2000 def 400/200); system `supply\|return`; ductMaterial; roll |
+| Схема duct-fitting | `packages/core/src/schema/nodes/duct-fitting.ts` | fittingType elbow/tee/cross/reducer/transition; angle 0–90°; branchAngle; shape/shape2; **мм** (Ø100–2000 def 315); system `supply\|return` |
 | Параметрика фиттингов | `packages/nodes/src/duct-fitting/parametrics.ts` | derive/reconcile/onDelete; matedDucts по колларам; MATE_TOL_M=0.05; leg length = max(0.14, r×2.5) |
 | Порты фиттингов | `packages/nodes/src/duct-fitting/ports.ts` | локальные порты (inlet/outlet/branch), конвенции XZ; getDuctFittingPorts |
 | Геометрия/план фиттинга | `duct-fitting/{geometry,floorplan,definition}.ts` | def.geometry/floorplan, keyboardActions R/T rotate ±45°, axisCycling |
@@ -80,13 +80,15 @@ UI — в `packages/editor` / `apps/editor`.
 ### Этап 0 — Справочник и документация (выполнен)
 - `docs/mep/00..05` + этот PLAN.md. ✅ (коммит вместе с планом)
 
-### Этап 1 — Миграция единиц: дюймы → мм + ГОСТ-ряд
-- Обратная совместимость: schemaVersion bump; на чтении конвертировать старые дюймы (×25.4) в мм,
-  помечая `metadata.migratedFromInches=true`; на записи — новые мм.
-- `duct-segment.ts`: `diameter`/`width`/`height` — мм; диапазоны по ГОСТ (Ø100–2000); `shape` сохранить.
-- `duct-fitting.ts`: те же поля в мм.
-- Инспекторы/HUD в `packages/nodes/src/duct-segment/*`, `duct-fitting/*` — единицы «мм», степпинг по ГОСТ-ряду.
-- Миграция в `packages/core/src/schema/migrations/`.
+### Этап 1 — Миграция единиц: дюймы → мм + ГОСТ-ряд (выполнен)
+- Обратная совместимость: schemaVersion 1→2; на чтении конвертировать старые дюймы (×25.4) в мм,
+  помечая `metadata.migratedFromInches=true`; на записи — новые мм. ✅ `packages/core/src/utils/duct-units-migration.ts`,
+  вызывается в `migrateNodes` (после `migrateVerticalSceneNodes`); идемпотентность по маркеру (2″→50.8 < 100 — value-проверка небезопасна).
+- `duct-segment.ts`: `diameter`/`width`/`height` — мм; диапазоны по ГОСТ (Ø100–2000, def 160/400/200). ✅
+- `duct-fitting.ts`: те же поля в мм (Ø100–2000, def 315/400/200). ✅
+- Инспекторы/HUD в `packages/nodes/src/duct-segment/*`, `duct-fitting/*` — единицы «мм», степпинг 5 мм, ГОСТ-ряд в тулбаре (`DUCT_DIAMETERS_MM`). ✅
+- Порты фиттингов рекламируют `diameter` в дюймах (кросс-видовая конвенция) — `/25.4` на выходе. ✅
+- Коммиты: `7f1aede5` (core), `31a7060f` (nodes).
 
 ### Этап 2 — Авто-зоны помещений (используем готовый движок)
 - Привязать `planAutoZonesForLevel` (create/update/delete) + live-синк (размыкание контура → авто-зона удаляется).
@@ -139,7 +141,7 @@ UI — в `packages/editor` / `apps/editor`.
 ## 7. Файлы, которые будут затронуты
 
 - `packages/core/src/schema/nodes/{duct-segment,duct-fitting,zone}.ts`
-- `packages/core/src/schema/migrations/*`
+- `packages/core/src/utils/duct-units-migration.ts` (миграция дюймы→мм; сделано)
 - `packages/core/src/mep/*` (новые: constants, norms-types, aerodynamics, sizing, routing-rules, bypass)
 - `packages/core/src/services/system-graph.ts`, `packages/core/src/lib/space-detection.ts`
 - `packages/nodes/src/duct-fitting/{schema,ports,parametrics,geometry,floorplan,definition}.ts`

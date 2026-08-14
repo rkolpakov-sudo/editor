@@ -4,10 +4,12 @@
 
 ### Features
 
+- Duct units switched from nominal inches to millimeters on the GOST R 70349 row (MEP stage 1). `duct-segment` and `duct-fitting` store sizes in mm (round Ø100–2000, default 160; rect/oval sides 100–2000, default 400×200) with schemaVersion 2. Legacy scenes saved in inches are migrated on load by `migrateDuctUnitsToMm` (exact ×25.4, idempotent via `metadata.migratedFromInches`), and the draw tool snaps to the GOST diameter row.
 - Undo/Redo buttons in the viewer toolbar (top-left, alongside the collapse and view-mode controls). The buttons subscribe to the history store via `subscribeHistoryCommandState`, dispatch through `runUndo`/`runRedo` (respecting the collaborative history delegate), and disable when nothing can be undone/redone. Keyboard shortcuts were already wired: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo.
 
 ### Fixes
 
+- CLI managed runtime now verifies recorded editor/MCP process identity on Windows (via `Get-CimInstance Win32_Process`) instead of always refusing force-stop. Previously `stopEditor({force: true})` threw `state_conflict` on win32, leaving detached editor and MCP subprocesses running — which hung `bun test` until they were killed.
 - Preserve custom scene materials across save, load, clone, fork, and live sync. Materials were dropped at every persistence boundary, so a scene reopened with default surfaces. Collections were dropped on MCP import for the same reason ([#597](https://github.com/pascalorg/editor/pull/597)) by [@ShiroKSH](https://github.com/ShiroKSH)
 - Wall junction mitering is now deterministic for exactly-collinear walls, so identical scenes produce identical geometry regardless of node iteration order ([#596](https://github.com/pascalorg/editor/pull/596)) by [@tomatotomata](https://github.com/tomatotomata)
 
