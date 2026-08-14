@@ -107,6 +107,7 @@ describe('live draft preview stores', () => {
         width2: 14,
         offset: 100,
         offsetRadiusFactor: 1.5,
+        radiusFactor: 1.5,
       },
     ]
     usePathDraftPreview

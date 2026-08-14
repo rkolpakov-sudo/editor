@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { elbowZeta } from './aerodynamics'
 import {
   ductElbow,
   ductSegment,
@@ -175,5 +176,47 @@ describe('computeNetworkPressure — потери по путям, критич�
     const results = computeNetworkPressure(nodes)
     expect(results).toHaveLength(1)
     expect(results[0]!.totalPressurePa).toBe(0)
+  })
+
+  test('отвод R=1D (короткий) теряет больше, чем R=1.5D (стандарт) — радиус учитывается (fix #1)', () => {
+    const build = (radiusFactor: number) => {
+      const equipment = hvacUnit([0, 0, 0])
+      const seg1 = ductSegment(
+        [
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        'exhaust',
+      )
+      const elbow = ductElbow([2, 0, 0], { system: 'exhaust', radiusFactor })
+      const seg2 = ductSegment(
+        [
+          [2, 0, 1],
+          [2, 0, 2],
+        ],
+        'exhaust',
+      )
+      const grille = ductTerminal([2, 0, 2], 'return-grille')
+      return sceneOf(equipment, seg1, elbow, seg2, grille)
+    }
+    // Изолируем: считаем потери только от отвода через прямое сравнение сцен.
+    const shortZeta = elbowZeta(90, 1)
+    const standardZeta = elbowZeta(90, 1.5)
+    expect(shortZeta).toBeGreaterThan(standardZeta)
+    // Сцена с R=1D должна давать больший суммарный ΔP.
+    const nodesShort = build(1)
+    const nodesStandard = build(1.5)
+    const shortGrille = Object.values(nodesShort).find((n) => n.type === 'duct-terminal')!
+    const standardGrille = Object.values(nodesStandard).find((n) => n.type === 'duct-terminal')!
+    const flowsShort = computeNetworkFlows(nodesShort, {
+      terminalFlows: { [shortGrille.id]: 90 },
+    })
+    const flowsStandard = computeNetworkFlows(nodesStandard, {
+      terminalFlows: { [standardGrille.id]: 90 },
+    })
+    const shortDrop = computeNetworkPressure(nodesShort, { flows: flowsShort })[0]!.totalPressurePa
+    const standardDrop = computeNetworkPressure(nodesStandard, { flows: flowsStandard })[0]!
+      .totalPressurePa
+    expect(shortDrop).toBeGreaterThan(standardDrop)
   })
 })

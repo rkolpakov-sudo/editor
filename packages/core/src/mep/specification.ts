@@ -165,14 +165,17 @@ function segmentLengthM(node: DuctSegmentNode): number {
   return total
 }
 
-/** Support count per straight leg of a possibly-bent segment. */
+/** Support count per straight leg of a possibly-bent segment. Riser legs
+ *  (a significant vertical change) use the СП 73 п. 6.5.7 step (≤ 4,5 м);
+ *  horizontal legs the п. 6.5.5 rule. */
 function segmentSupports(node: DuctSegmentNode, size: SegmentSize): number {
   let count = 0
   for (let i = 0; i < node.path.length - 1; i += 1) {
     const a = node.path[i]!
     const b = node.path[i + 1]!
     const legLength = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
-    count += supportCountForRun(legLength, node.shape, size.sizeMm)
+    const vertical = Math.abs(b[1] - a[1]) > 0.05 * legLength
+    count += supportCountForRun(legLength, node.shape, size.sizeMm, vertical)
   }
   return count
 }
@@ -486,7 +489,7 @@ export function buildDuctSpecification(
       case 'elbow':
         pushFitting(
           fitting,
-          `Отвод ${fitting.angle}° ${label} R=${fitting.offsetRadiusFactor}D`,
+          `Отвод ${fitting.angle}° ${label} R=${fitting.radiusFactor ?? 1.5}D`,
           'ГОСТ Р 70349 · отвод',
         )
         break
@@ -524,6 +527,16 @@ export function buildDuctSpecification(
           `Крестовина ${label}, ответвления ${fittingBranchLabel(fitting)}`,
           'ГОСТ Р 70349 · крестовина',
         )
+        break
+      case 'saddle':
+        pushFitting(
+          fitting,
+          `Седелка ${label} (врезка в бок воздуховода)`,
+          'ГОСТ Р 70349 · седелка',
+        )
+        break
+      case 'hood':
+        pushFitting(fitting, `Зонт ${label} (выход в атмосферу)`, 'ГОСТ Р 70349 · зонт')
         break
     }
   }

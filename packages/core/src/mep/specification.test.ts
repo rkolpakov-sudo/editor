@@ -41,6 +41,7 @@ function fitting(opts: {
   angle?: number
   offset?: number
   offsetRadiusFactor?: number
+  radiusFactor?: number
 }): DuctFittingNode {
   return DuctFittingNode.parse({
     id: opts.id as AnyNodeId,
@@ -56,6 +57,7 @@ function fitting(opts: {
     angle: opts.angle ?? 90,
     offset: opts.offset ?? 100,
     offsetRadiusFactor: opts.offsetRadiusFactor ?? 1.5,
+    radiusFactor: opts.radiusFactor ?? 1.5,
   })
 }
 
@@ -321,6 +323,46 @@ describe('buildDuctSpecification', () => {
     expect(elbows315!.size).toBe('Ø315')
     // The two Ø200 elbows were grouped into one row, not a separate row each.
     expect(spec.sections.fittings.filter((r) => r.name === 'Отвод 90° Ø200 R=1.5D')).toHaveLength(1)
+  })
+
+  test('elbow rows carry the bend radius R/D — R=1D and R=1.5D stay separate (fix #1)', () => {
+    const scene = sceneOf(
+      fitting({
+        id: 'duct-fitting_e1',
+        fittingType: 'elbow',
+        angle: 90,
+        diameter: 200,
+        radiusFactor: 1.5,
+      }),
+      fitting({
+        id: 'duct-fitting_e2',
+        fittingType: 'elbow',
+        angle: 90,
+        diameter: 200,
+        radiusFactor: 1,
+      }),
+    )
+    const spec = buildDuctSpecification(scene)
+    const r15 = spec.sections.fittings.find((r) => r.name === 'Отвод 90° Ø200 R=1.5D')
+    const r10 = spec.sections.fittings.find((r) => r.name === 'Отвод 90° Ø200 R=1D')
+    expect(r15).toBeDefined()
+    expect(r10).toBeDefined()
+    expect(r15!.quantity).toBe(1)
+    expect(r10!.quantity).toBe(1)
+  })
+
+  test('седелка и зонт попадают в фасонные части (fix #4)', () => {
+    const scene = sceneOf(
+      fitting({ id: 'duct-fitting_s1', fittingType: 'saddle', diameter: 200 }),
+      fitting({ id: 'duct-fitting_h1', fittingType: 'hood', diameter: 315 }),
+    )
+    const spec = buildDuctSpecification(scene)
+    const saddle = spec.sections.fittings.find((r) => r.name.includes('Седелка'))
+    const hood = spec.sections.fittings.find((r) => r.name.includes('Зонт'))
+    expect(saddle).toBeDefined()
+    expect(hood).toBeDefined()
+    expect(saddle!.quantity).toBe(1)
+    expect(hood!.quantity).toBe(1)
   })
 
   test('duct rows link network sizing: flow, velocity, sized profile (Этап 10)', () => {

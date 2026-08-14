@@ -45,7 +45,7 @@ export const DuctFittingNode = BaseNode.extend({
   // XYZ euler radians.
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   fittingType: z
-    .enum(['elbow', 'tee', 'cross', 'reducer', 'transition', 'offset'])
+    .enum(['elbow', 'tee', 'cross', 'reducer', 'transition', 'offset', 'saddle', 'hood'])
     .default('elbow'),
   // Run-leg cross-section: round collars, or a rect / flat-oval profile
   // matching the trunk the fitting sits in. Reducers ignore the shape.
@@ -88,6 +88,11 @@ export const DuctFittingNode = BaseNode.extend({
   // Bend radius of an `offset` fitting as a multiple of the duct size
   // (R = offsetRadiusFactor × D). ГОСТ-типичный отвод 1.5D.
   offsetRadiusFactor: z.number().min(1).max(2).default(1.5),
+  // Bend radius of an ELBOW as a multiple of the duct size: ГОСТ Р 70349 /
+  // ГОСТ 17375 offer R=1D (short) and R=1.5D (standard) elbows. Drives the
+  // ξ lookup (elbowZeta) and the specification's «R=…D» label. Ignored by
+  // every other fitting type.
+  radiusFactor: z.number().min(1).max(2).default(1.5),
   ductMaterial: z.enum(['sheet-metal', 'flex', 'duct-board']).default('sheet-metal'),
   system: z.enum(['supply', 'exhaust', 'return']).default('supply'),
   slots: z.record(z.string(), z.string()).optional(),
@@ -96,7 +101,7 @@ export const DuctFittingNode = BaseNode.extend({
   Duct fitting - elbow, tee, cross, reducer, square-to-round transition, or offset (утка) between duct runs.
   - position: [x, y, z] level-local meters
   - rotation: [x, y, z] euler radians
-  - fittingType: elbow | tee | cross | reducer | transition (rect end -X, round end +X) | offset (S, ports on the run axis)
+  - fittingType: elbow | tee | cross | reducer | transition (rect end -X, round end +X) | offset (S, ports on the run axis) | saddle (врезка в бок) | hood (зонт на выход в атмосферу)
   - shape: round | rect | oval run legs (matches the trunk; ignored by reducer / transition)
   - width / height: rect / oval run-leg profile in mm (transition: the rect end)
   - shape2: round | rect | oval tee / cross branch (matches the duct drawn off the tap)
@@ -107,6 +112,7 @@ export const DuctFittingNode = BaseNode.extend({
   - diameter2: tee / cross branch / reducer outlet / transition round-end diameter in mm
   - offset: lateral axis displacement of the offset (утка), mm
   - offsetRadiusFactor: offset bend radius as R/D (default 1.5)
+  - radiusFactor: elbow bend radius as R/D (1D short / 1.5D standard, default 1.5)
   - ductMaterial: sheet-metal | flex | duct-board
   - system: supply | exhaust | return
   `,

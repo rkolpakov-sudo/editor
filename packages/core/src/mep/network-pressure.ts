@@ -81,7 +81,7 @@ function fittingZetaAlong(
 ): number {
   switch (node.fittingType) {
     case 'elbow':
-      return elbowZeta(node.angle, node.offsetRadiusFactor)
+      return elbowZeta(node.angle, node.radiusFactor ?? 1.5)
     case 'offset':
       return BYPASS_ZETA_ELBOW_COUNT * elbowZeta(node.angle, node.offsetRadiusFactor)
     case 'tee':

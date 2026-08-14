@@ -38,6 +38,26 @@ describe('mounting rules (СП 73.13330.2016 п. 6.5.5)', () => {
     expect(plan.spacingM).toBe(4)
     expect(plan.supportCount).toBe(2)
   })
+
+  test('вертикальные (riser) legs используют шаг 4,5 м — СП 73 п. 6.5.7 (fix #5)', () => {
+    // Горизонтальный Ø200 на 6 м: шаг 4 м → 2 опоры.
+    const horizontal = supportCountForRun(6, 'round', 200, false)
+    expect(horizontal).toBe(2)
+    // Вертикальный Ø200 на 6 м: шаг 4,5 м → floor(6/4.5)+1 = 2 опоры.
+    const vertical = supportCountForRun(6, 'round', 200, true)
+    expect(vertical).toBe(2)
+    // 9 м вертикали: floor(9/4.5)+1 = 3.
+    expect(supportCountForRun(9, 'round', 200, true)).toBe(3)
+    // planRunMounting с флагом vertical.
+    const plan = planRunMounting({
+      from: [0, 0],
+      to: [0, 0],
+      shape: 'round',
+      sizeMm: 200,
+      vertical: true,
+    })
+    expect(plan.spacingM).toBe(4.5)
+  })
 })
 
 describe('planar geometry primitives', () => {

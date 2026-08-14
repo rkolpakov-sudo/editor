@@ -254,6 +254,7 @@ export function ductElbow(position: Point, fields: Record<string, unknown> = {})
     diameter: 160,
     angle: 90,
     offsetRadiusFactor: 1.5,
+    radiusFactor: 1.5,
     system: 'supply',
     ...fields,
   })

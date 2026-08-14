@@ -77,7 +77,9 @@ import { ductPortDiameterIn, rectSectionAxes, rollToContinueAcrossElbow } from '
  *     outlet collar — corners get real fittings instead of butt joints.
  *   - **Tee tap**: starting OR ending on the SIDE of an existing run
  *     (centerline snap) splits the trunk, mints a tee at the tap point,
- *     and the branch leaves square from its collar.
+ *     and the branch leaves square from its collar. A tee/cross is only
+ *     minted when both runs belong to the SAME air loop (П-П or В-В) —
+ *     П/В crossings stay separate so the МЭП bypass (утка) can find them.
  *   - **Cross tap**: drawing a run straight THROUGH the side of an
  *     existing run (interior crossing) splits the trunk, mints a 4-way
  *     cross at the crossing, and the drawn run continues out the far
@@ -229,12 +231,17 @@ function portPoint(port: ScenePort): [number, number, number] {
 
 /** Cross-section the tool draws with (and commits onto the node). Oval
  *  never comes from the Q toggle (round ↔ rect) — it enters by joining
- *  an existing oval run / fitting collar and continuing its profile. */
+ *  an existing oval run / fitting collar and continuing its profile.
+ *  `system` is the air loop (П/В/Р) the drawn run belongs to: inherited
+ *  from a joined port, otherwise the tool default. Auto-fitting (tee /
+ *  cross) only connects runs of the SAME system so П/В crossings stay
+ *  separate for the МЭП bypass. */
 type DraftProfile = {
   shape: 'round' | 'rect' | 'oval'
   diameter: number
   width: number
   height: number
+  system: 'supply' | 'exhaust' | 'return'
 }
 
 /**
@@ -252,6 +259,7 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
       diameter: clampDuctMm(owner.type === 'duct-segment' ? owner.diameter : owner.diameter),
       width: owner.width,
       height: owner.height,
+      system: owner.system,
     }
   }
   if (owner.type === 'hvac-equipment' || owner.type === 'duct-terminal') {
@@ -259,12 +267,14 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
     // Adopt the collar's cross-section so the run leaves a rect / oval
     // plenum as rect / oval (rolled to match in `continuityRollFrom`),
     // falling back to round at the advertised diameter (ported in inches).
+    const system = (port.system === 'exhaust' ? 'exhaust' : 'supply') as DraftProfile['system']
     if (port.shape && port.shape !== 'round') {
       return {
         shape: port.shape,
         diameter: clampDuctMm(port.diameter * 25.4),
         width: port.width ?? defaults.width,
         height: port.height ?? defaults.height,
+        system,
       }
     }
     return {
@@ -272,6 +282,7 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
       diameter: clampDuctMm(port.diameter * 25.4),
       width: defaults.width,
       height: defaults.height,
+      system,
     }
   }
   return null
@@ -383,14 +394,16 @@ function planDuctDraw(
   const endRealign = endPlan ? null : realignPlanFor(endPort, [-dir[0], -dir[1], -dir[2]])
   const trunkBody = startPlan ? null : startBody
   const trunkOwner = trunkBody ? useScene.getState().nodes[trunkBody.nodeId] : null
+  const trunkSameSystem =
+    trunkOwner?.type === 'duct-segment' && trunkOwner.system === profile.system
   const teePlan =
-    trunkBody && trunkOwner?.type === 'duct-segment'
-      ? planTeeAtRunBody(trunkOwner, trunkBody, dir, profile)
-      : null
+    trunkBody && trunkSameSystem ? planTeeAtRunBody(trunkOwner, trunkBody, dir, profile) : null
   const endTrunkBody = endPlan || endRealign ? null : endBody
   const endTrunkOwner = endTrunkBody ? useScene.getState().nodes[endTrunkBody.nodeId] : null
+  const endTrunkSameSystem =
+    endTrunkOwner?.type === 'duct-segment' && endTrunkOwner.system === profile.system
   const endTeePlan =
-    endTrunkBody && endTrunkOwner?.type === 'duct-segment'
+    endTrunkBody && endTrunkSameSystem
       ? planTeeAtRunBody(endTrunkOwner, endTrunkBody, [-dir[0], -dir[1], -dir[2]], profile)
       : null
   let ductStart =
@@ -411,8 +424,10 @@ function planDuctDraw(
   const crossOwner = crossHit ? useScene.getState().nodes[crossHit.nodeId] : null
   const crossTappedElsewhere =
     crossHit?.nodeId === trunkBody?.nodeId || crossHit?.nodeId === endTrunkBody?.nodeId
+  const crossSameSystem =
+    crossOwner?.type === 'duct-segment' && crossOwner.system === profile.system
   let cross =
-    crossHit && !crossTappedElsewhere && crossOwner?.type === 'duct-segment'
+    crossHit && !crossTappedElsewhere && crossSameSystem
       ? planCrossAtRunBody(crossOwner, crossHit, dir, profile)
       : null
 
@@ -446,6 +461,7 @@ function planDuctDraw(
       diameter: profile.diameter,
       width: profile.width,
       height: profile.height,
+      system: profile.system,
       roll,
     })
   const ducts = cross
@@ -522,6 +538,7 @@ const DuctSegmentTool = () => {
       diameter: seeded?.diameter ?? defaults.diameter,
       width: seeded?.width ?? defaults.width,
       height: seeded?.height ?? defaults.height,
+      system: seeded?.system ?? defaults.system,
     }
   })
   const [draftPoints, setDraftPoints] = useState<Array<[number, number, number]>>([])
@@ -916,6 +933,18 @@ const DuctSegmentTool = () => {
       } else if (e.key === 'q' || e.key === 'Q') {
         e.preventDefault()
         setProfile((p) => ({ ...p, shape: p.shape === 'round' ? 'rect' : 'round' }))
+        triggerSFX('sfx:grid-snap')
+      } else if (e.key === 's' || e.key === 'S') {
+        // Cycle the drawn run's air loop П → В → Р → П (ГОСТ 21.602).
+        // Auto-fitting only joins runs of the SAME system, so switching a
+        // run to В before crossing П keeps the two networks separate for
+        // the МЭП bypass (утка) to detect the crossing.
+        e.preventDefault()
+        const cycle: DraftProfile['system'][] = ['supply', 'exhaust', 'return']
+        setProfile((p) => ({
+          ...p,
+          system: cycle[(cycle.indexOf(p.system) + 1) % cycle.length]!,
+        }))
         triggerSFX('sfx:grid-snap')
       } else if (e.key === 'c' || e.key === 'C') {
         // Toggle ceiling routing: default ON hangs runs under the ceiling /

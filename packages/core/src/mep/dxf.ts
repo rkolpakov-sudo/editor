@@ -251,6 +251,10 @@ function fittingTypeLabel(node: DuctFittingNode): string {
     case 'reducer':
     case 'transition':
       return `Переход ${size}→${secondary}`
+    case 'saddle':
+      return `Седелка ${size}`
+    case 'hood':
+      return `Зонт ${size}`
   }
 }
 
@@ -261,7 +265,7 @@ function drawFitting(writer: DxfWriter, node: DuctFittingNode, labelHeightM: num
     case 'elbow': {
       // Flow turns from +X to +Z by `angle`°: the arc's centre sits at
       // (0, +R) in the local frame, the bend sweeps 270° → 270°+angle.
-      const radiusM = (node.offsetRadiusFactor * fittingSizeMm(node)) / 1000
+      const radiusM = ((node.radiusFactor ?? 1.5) * fittingSizeMm(node)) / 1000
       const c = fittingPlanPoint(node, [0, radiusM])
       writer.arc(c[0], c[1], radiusM, 270, 270 + node.angle, layer)
       break
@@ -316,6 +320,27 @@ function drawFitting(writer: DxfWriter, node: DuctFittingNode, labelHeightM: num
       writer.line(botIn[0], botIn[1], botOut[0], botOut[1], layer)
       writer.line(topIn[0], topIn[1], botIn[0], botIn[1], layer)
       writer.line(topOut[0], topOut[1], botOut[0], botOut[1], layer)
+      break
+    }
+    case 'saddle': {
+      // Врезка в бок: короткая ось + полукруглый бобышек в сторону.
+      const leg = fittingLegM(node.diameter)
+      const r = Math.max(fittingSizeMm(node) / 1000 / 2, 0.05)
+      const runIn = fittingPlanPoint(node, [-leg, 0])
+      const runOut = fittingPlanPoint(node, [leg, 0])
+      writer.line(runIn[0], runIn[1], runOut[0], runOut[1], layer)
+      writer.arc(center[0], center[1], r, 0, 180, layer)
+      break
+    }
+    case 'hood': {
+      // Зонт на выход в атмосферу: конус (два клина от центра к ширине).
+      const r = Math.max(fittingSizeMm(node) / 1000 / 2, 0.05)
+      const tip = fittingPlanPoint(node, [-fittingLegM(node.diameter), 0])
+      const left = fittingPlanPoint(node, [fittingLegM(node.diameter), r])
+      const right = fittingPlanPoint(node, [fittingLegM(node.diameter), -r])
+      writer.line(center[0], center[1], left[0], left[1], layer)
+      writer.line(center[0], center[1], right[0], right[1], layer)
+      writer.line(left[0], left[1], right[0], right[1], layer)
       break
     }
     default: {

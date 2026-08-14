@@ -1,3 +1,4 @@
+import { VERTICAL_MOUNTING_SPACING_M } from './constants'
 import type { DuctShape } from './norms-types'
 
 /**
@@ -24,12 +25,15 @@ export type WallLike = {
 
 /** A single straight leg of a duct run on the plan. `sizeMm` is the body
  *  dimension across the run: diameter for round, the larger side for
- *  rect/oval (used for the fire-damper / clearance rules). */
+ *  rect/oval (used for the fire-damper / clearance rules). `vertical`
+ *  marks a riser leg (a significant change in Y between its endpoints) —
+ *  vertical runs get their own СП 73 п. 6.5.7 mounting step (≤ 4,5 м). */
 export type DuctRunLeg = {
   from: PlanPoint
   to: PlanPoint
   shape: DuctShape
   sizeMm: number
+  vertical?: boolean
 }
 
 export const DEFAULT_WALL_THICKNESS_M = 0.1
@@ -53,10 +57,17 @@ export function mountingSpacingM(_shape: DuctShape, sizeMm: number): number {
 }
 
 /** Number of supports on a straight run of the given length: floor(L/spacing)
- *  + 1, so every piece between two supports is within the spacing. */
-export function supportCountForRun(lengthM: number, shape: DuctShape, sizeMm: number): number {
+ *  + 1, so every piece between two supports is within the spacing. Vertical
+ *  (riser) legs use the СП 73.13330.2016 п. 6.5.7 step (≤ 4,5 м) instead of
+ *  the horizontal п. 6.5.5 rule. */
+export function supportCountForRun(
+  lengthM: number,
+  shape: DuctShape,
+  sizeMm: number,
+  vertical = false,
+): number {
   if (lengthM <= 0) return 0
-  const spacing = mountingSpacingM(shape, sizeMm)
+  const spacing = vertical ? VERTICAL_MOUNTING_SPACING_M : mountingSpacingM(shape, sizeMm)
   return Math.floor(lengthM / spacing) + 1
 }
 
@@ -65,12 +76,14 @@ export type MountingPlan = {
   supportCount: number
 }
 
-/** Plan supports for a single straight leg. */
+/** Plan supports for a single straight leg. Vertical legs (risers) use the
+ *  п. 6.5.7 step; horizontal legs the п. 6.5.5 rule. */
 export function planRunMounting(leg: DuctRunLeg): MountingPlan {
   const lengthM = Math.hypot(leg.to[0] - leg.from[0], leg.to[1] - leg.from[1])
+  const vertical = leg.vertical === true
   return {
-    spacingM: mountingSpacingM(leg.shape, leg.sizeMm),
-    supportCount: supportCountForRun(lengthM, leg.shape, leg.sizeMm),
+    spacingM: vertical ? VERTICAL_MOUNTING_SPACING_M : mountingSpacingM(leg.shape, leg.sizeMm),
+    supportCount: supportCountForRun(lengthM, leg.shape, leg.sizeMm, vertical),
   }
 }
 

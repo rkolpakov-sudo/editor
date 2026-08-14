@@ -43,6 +43,7 @@ export const ductFittingDefinition: NodeDefinition<typeof DuctFittingNode> = {
     diameter2: 315,
     offset: 100,
     offsetRadiusFactor: 1.5,
+    radiusFactor: 1.5,
     ductMaterial: 'sheet-metal',
     system: 'supply',
   }),

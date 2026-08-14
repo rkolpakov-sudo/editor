@@ -193,6 +193,7 @@ export const ductSegmentDefinition: NodeDefinition<typeof DuctSegmentNode> = {
     { key: 'Alt + drag', label: 'Go vertical ↕, click to place' },
     { key: '[ / ]', label: 'Duct diameter down / up' },
     { key: 'Q', label: 'Round / rect trunk' },
+    { key: 'S', label: 'System П/В/Р (P/V/R)' },
     { key: 'C', label: 'Ceiling / floor height (default: ceiling)' },
     { key: 'Esc', label: 'Cancel start point' },
   ],
