@@ -43,6 +43,31 @@ Read the relevant page in `wiki/architecture/` **before** writing code. The page
 
 Invoke the `review-architecture` skill (`.agents/skills/review-architecture/SKILL.md`). It loads the required architecture pages, fetches the diff, classifies each new file by layer, and reports findings grouped by severity.
 
+## MEP: профессиональная прокладка воздуховодов по нормам РФ (в работе)
+
+Планируемое расширение MEP-инструмента до уровня Revit/MagiCAD для проектировщиков ОВиК РФ.
+Полный план и справочник норм — в `docs/mep/` (читай перед MEP-работами):
+
+- `docs/mep/PLAN.md` — утверждённый план, этапы 0→7 (реализация строго по этапам, каждый с тестами).
+- `docs/mep/00-norms-sp60-velocities.md` — скорости СП 60 прил. Л (табл. Л.1/Л.2/Л.3), ГОСТ 30494, формулы, шум.
+- `docs/mep/01-air-exchange-residential.md` — воздухообмен жилых (СП 54) + универсальная база.
+- `docs/mep/02-duct-nomenclature-gost.md` — номенклатура ГОСТ Р 70349 (ряды размеров, длины, фасонные части, материалы).
+- `docs/mep/03-installation-sp73.md` — правила монтажа (крепления, гильзы/проходы, клапаны).
+- `docs/mep/04-routing-bypass-practice.md` — трассировка и обвод пересечений П/В (утка, зазор 50 мм).
+- `docs/mep/05-sources-log.md` — журнал источников (статусы доступа, платные тексты).
+
+Ключевые решения пользователя (не менять без явного запроса):
+- Единицы — **полный переход на мм + ГОСТ-ряд** (сейчас в схеме дюймы; миграция с schemaVersion).
+- Системы — `supply | exhaust | return` (П/В/рециркуляция), маркировка П1/В1 по ГОСТ 21.602.
+- Пересечение трасс П/В — **горизонтальный обвод в плане (утка)**: приток идёт прямо, вытяжка обходит;
+  зазор между корпусами ≥ 50 мм; автовыбор 45°/90° (R=1.5D); пересчёт потерь на обводе.
+- Авто-зоны помещений — автоматически из замкнутых контуров стен, удаляются при размыкании, видны по умолчанию.
+- Расчётный движок и правила — в `packages/core` (чистая логика, без Three.js); UI — в `packages/editor`/`apps/editor`.
+
+Статус: **Этап 0 выполнен** (справочник + план в `docs/mep/`, закоммичено). Следующий — Этап 1
+(миграция дюймы→мм + ГОСТ-ряд). Архитектурно-чувствительные изменения (новая схема/система/инструмент) —
+сначала читать `wiki/architecture/` по правилам ниже.
+
 ## Operating rules
 
 - Read the full file before editing. Plan all changes, then make one complete edit.
