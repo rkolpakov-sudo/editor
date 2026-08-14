@@ -16,7 +16,7 @@ function port(position: Point, direction: Point): ScenePort {
   }
 }
 
-const ROUND_6: DuctProfile = { shape: 'round', diameter: 6, width: 14, height: 8 }
+const ROUND_160: DuctProfile = { shape: 'round', diameter: 160, width: 400, height: 200 }
 
 function dist(a: readonly number[], b: readonly number[]): number {
   return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!)
@@ -34,7 +34,7 @@ function dot(a: readonly number[], b: readonly number[]): number {
  * point facing along the new run.
  */
 function expectMated(joint: ScenePort, away: Point) {
-  const plan = planElbowAtPort(joint, away, ROUND_6)
+  const plan = planElbowAtPort(joint, away, ROUND_160)
   expect(plan).not.toBeNull()
   const ports = getDuctFittingPorts(plan!.fitting)
   const inlet = ports.find((p) => p.id === 'inlet')!
@@ -70,42 +70,42 @@ describe('planElbowAtPort', () => {
   })
 
   test('straight continuation → no fitting', () => {
-    expect(planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [1, 0, 0], ROUND_6)).toBeNull()
+    expect(planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [1, 0, 0], ROUND_160)).toBeNull()
   })
 
   test('shallow 10° turn → no fitting (below the 15° elbow minimum)', () => {
     const t = (10 * Math.PI) / 180
     expect(
-      planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [Math.cos(t), 0, Math.sin(t)], ROUND_6),
+      planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [Math.cos(t), 0, Math.sin(t)], ROUND_160),
     ).toBeNull()
   })
 
   test('doubling back past 90° → no fitting', () => {
     const t = (135 * Math.PI) / 180
     expect(
-      planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [Math.cos(t), 0, Math.sin(t)], ROUND_6),
+      planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [Math.cos(t), 0, Math.sin(t)], ROUND_160),
     ).toBeNull()
   })
 
   test('rect profile: elbow carries the trunk W×H and equivalent diameter', () => {
-    const rect: DuctProfile = { shape: 'rect', diameter: 6, width: 14, height: 8 }
+    const rect: DuctProfile = { shape: 'rect', diameter: 160, width: 400, height: 200 }
     const plan = planElbowAtPort(port([3, 2.4, 0], [1, 0, 0]), [0, 0, 1], rect)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.shape).toBe('rect')
-    expect(plan!.fitting.width).toBe(14)
-    expect(plan!.fitting.height).toBe(8)
-    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((14 * 8) / Math.PI), 6)
+    expect(plan!.fitting.width).toBe(400)
+    expect(plan!.fitting.height).toBe(200)
+    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((400 * 200) / Math.PI), 6)
   })
 
   test('oval profile: elbow carries the trunk W×H and oval equivalent diameter', () => {
-    const oval: DuctProfile = { shape: 'oval', diameter: 6, width: 14, height: 8 }
+    const oval: DuctProfile = { shape: 'oval', diameter: 160, width: 400, height: 200 }
     const plan = planElbowAtPort(port([3, 2.4, 0], [1, 0, 0]), [0, 0, 1], oval)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.shape).toBe('oval')
-    expect(plan!.fitting.width).toBe(14)
-    expect(plan!.fitting.height).toBe(8)
-    // Flat-oval area: (14 − 8) × 8 + π(8/2)²
-    const area = (14 - 8) * 8 + Math.PI * 16
+    expect(plan!.fitting.width).toBe(400)
+    expect(plan!.fitting.height).toBe(200)
+    // Flat-oval area: (400 − 200) × 200 + π(200/2)²
+    const area = (400 - 200) * 200 + Math.PI * 10000
     expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt(area / Math.PI), 6)
   })
 
@@ -135,9 +135,9 @@ function trunk(path: Point[]): DuctSegmentNode {
     parentId: null,
     visible: true,
     metadata: {},
-    name: 'Trunk',
-    path,
-    diameter: 8,
+      name: 'Trunk',
+      path,
+      diameter: 200,
     ductMaterial: 'sheet-metal',
     insulationR: 0,
     system: 'supply',
@@ -154,7 +154,7 @@ describe('planTeeAtRunBody', () => {
       [0, 2.4, 0],
       [6, 2.4, 0],
     ])
-    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_6)
+    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_160)
     expect(plan).not.toBeNull()
 
     const ports = getDuctFittingPorts(plan!.fitting)
@@ -175,8 +175,8 @@ describe('planTeeAtRunBody', () => {
     expect(dist(plan!.branchCollar, branch.position)).toBeLessThan(1e-6)
     expect(dot(branch.direction, [0, 0, 1])).toBeCloseTo(1, 6)
     // Tee carries trunk diameter on the run, branch diameter on the collar.
-    expect(plan!.fitting.diameter).toBe(8)
-    expect(plan!.fitting.diameter2).toBe(6)
+    expect(plan!.fitting.diameter).toBe(200)
+    expect(plan!.fitting.diameter2).toBe(160)
   })
 
   test('45° drawn branch builds a 45° lateral that follows the drawn run', () => {
@@ -188,7 +188,7 @@ describe('planTeeAtRunBody', () => {
     // Drawn 45° downstream off the +X trunk. The tee becomes a lateral whose
     // branch points along the drawn direction, so the new duct continues
     // straight out of the collar instead of kinking square.
-    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [d, 0, d], ROUND_6)
+    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [d, 0, d], ROUND_160)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.branchAngle).toBeCloseTo(45, 6)
     const branch = getDuctFittingPorts(plan!.fitting).find((p) => p.id === 'branch')!
@@ -200,8 +200,8 @@ describe('planTeeAtRunBody', () => {
       [0, 0, 0],
       [6, 0, 0],
     ])
-    expect(planTeeAtRunBody(run, bodyHit(run, 0, [0.1, 0, 0]), [0, 0, 1], ROUND_6)).toBeNull()
-    expect(planTeeAtRunBody(run, bodyHit(run, 0, [5.95, 0, 0]), [0, 0, 1], ROUND_6)).toBeNull()
+    expect(planTeeAtRunBody(run, bodyHit(run, 0, [0.1, 0, 0]), [0, 0, 1], ROUND_160)).toBeNull()
+    expect(planTeeAtRunBody(run, bodyHit(run, 0, [5.95, 0, 0]), [0, 0, 1], ROUND_160)).toBeNull()
   })
 
   test('branch parallel to the trunk → null', () => {
@@ -209,7 +209,7 @@ describe('planTeeAtRunBody', () => {
       [0, 0, 0],
       [6, 0, 0],
     ])
-    expect(planTeeAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [1, 0, 0], ROUND_6)).toBeNull()
+    expect(planTeeAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [1, 0, 0], ROUND_160)).toBeNull()
   })
 
   test('vertical drop off a horizontal trunk', () => {
@@ -217,7 +217,7 @@ describe('planTeeAtRunBody', () => {
       [0, 2.4, 0],
       [6, 2.4, 0],
     ])
-    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, -1, 0], ROUND_6)
+    const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, -1, 0], ROUND_160)
     expect(plan).not.toBeNull()
     const branch = getDuctFittingPorts(plan!.fitting).find((p) => p.id === 'branch')!
     expect(dot(branch.direction, [0, -1, 0])).toBeCloseTo(1, 6)
@@ -236,22 +236,22 @@ describe('planTeeAtRunBody', () => {
         [6, 2.4, 0],
       ],
       shape: 'rect',
-      diameter: 6,
-      width: 14,
-      height: 8,
+      diameter: 160,
+      width: 400,
+      height: 200,
       ductMaterial: 'sheet-metal',
       insulationR: 0,
       system: 'supply',
     })
-    const plan = planTeeAtRunBody(rect, bodyHit(rect, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_6)
+    const plan = planTeeAtRunBody(rect, bodyHit(rect, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_160)
     expect(plan).not.toBeNull()
-    // Tee run legs carry the area-equivalent round size of 14×8.
-    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((14 * 8) / Math.PI), 6)
-    expect(plan!.fitting.diameter2).toBe(6)
+    // Tee run legs carry the area-equivalent round size of 400×200.
+    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((400 * 200) / Math.PI), 6)
+    expect(plan!.fitting.diameter2).toBe(160)
     // The downstream half keeps the trunk's rect profile.
     expect(plan!.trunkTail.shape).toBe('rect')
-    expect(plan!.trunkTail.width).toBe(14)
-    expect(plan!.trunkTail.height).toBe(8)
+    expect(plan!.trunkTail.width).toBe(400)
+    expect(plan!.trunkTail.height).toBe(200)
   })
 
   test('rect branch: tee carries the branch W×H profile and equivalent diameter', () => {
@@ -259,13 +259,13 @@ describe('planTeeAtRunBody', () => {
       [0, 2.4, 0],
       [6, 2.4, 0],
     ])
-    const rectBranch: DuctProfile = { shape: 'rect', diameter: 6, width: 12, height: 6 }
+    const rectBranch: DuctProfile = { shape: 'rect', diameter: 160, width: 300, height: 150 }
     const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], rectBranch)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.shape2).toBe('rect')
-    expect(plan!.fitting.width2).toBe(12)
-    expect(plan!.fitting.height2).toBe(6)
-    expect(plan!.fitting.diameter2).toBeCloseTo(2 * Math.sqrt((12 * 6) / Math.PI), 6)
+    expect(plan!.fitting.width2).toBe(300)
+    expect(plan!.fitting.height2).toBe(150)
+    expect(plan!.fitting.diameter2).toBeCloseTo(2 * Math.sqrt((300 * 150) / Math.PI), 6)
   })
 
   test('oval branch: tee carries the branch W×H profile and oval equivalent diameter', () => {
@@ -273,13 +273,13 @@ describe('planTeeAtRunBody', () => {
       [0, 2.4, 0],
       [6, 2.4, 0],
     ])
-    const ovalBranch: DuctProfile = { shape: 'oval', diameter: 6, width: 12, height: 6 }
+    const ovalBranch: DuctProfile = { shape: 'oval', diameter: 160, width: 300, height: 150 }
     const plan = planTeeAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], ovalBranch)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.shape2).toBe('oval')
-    expect(plan!.fitting.width2).toBe(12)
-    expect(plan!.fitting.height2).toBe(6)
-    const area = (12 - 6) * 6 + Math.PI * 9
+    expect(plan!.fitting.width2).toBe(300)
+    expect(plan!.fitting.height2).toBe(150)
+    const area = (300 - 150) * 150 + Math.PI * 5625
     expect(plan!.fitting.diameter2).toBeCloseTo(2 * Math.sqrt(area / Math.PI), 6)
   })
 
@@ -289,7 +289,7 @@ describe('planTeeAtRunBody', () => {
       [4, 0, 0],
       [4, 0, 4],
     ])
-    const plan = planTeeAtRunBody(run, bodyHit(run, 1, [4, 0, 2]), [1, 0, 0], ROUND_6)
+    const plan = planTeeAtRunBody(run, bodyHit(run, 1, [4, 0, 2]), [1, 0, 0], ROUND_160)
     expect(plan).not.toBeNull()
     // Upstream half keeps both leading points.
     expect(plan!.trunkUpdate.data.path.length).toBe(3)
@@ -307,7 +307,7 @@ describe('planCrossAtRunBody', () => {
       [6, 2.4, 0],
     ])
     // Drawn run goes -Z → +Z straight through the trunk at x=3.
-    const plan = planCrossAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_6)
+    const plan = planCrossAtRunBody(run, bodyHit(run, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_160)
     expect(plan).not.toBeNull()
 
     const ports = getDuctFittingPorts(plan!.fitting)
@@ -329,8 +329,8 @@ describe('planCrossAtRunBody', () => {
     expect(dist(plan!.branchCollarFar, branch.position)).toBeLessThan(1e-6)
     expect(dist(plan!.branchCollarNear, branch2.position)).toBeLessThan(1e-6)
     // Cross carries trunk diameter on the run, branch diameter on the collars.
-    expect(plan!.fitting.diameter).toBe(8)
-    expect(plan!.fitting.diameter2).toBe(6)
+    expect(plan!.fitting.diameter).toBe(200)
+    expect(plan!.fitting.diameter2).toBe(160)
   })
 
   test('near / far collars sit on opposite sides of the trunk', () => {
@@ -338,7 +338,7 @@ describe('planCrossAtRunBody', () => {
       [0, 0, 0],
       [6, 0, 0],
     ])
-    const plan = planCrossAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [0, 0, 1], ROUND_6)
+    const plan = planCrossAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [0, 0, 1], ROUND_160)
     expect(plan).not.toBeNull()
     // awayDir is +Z, so the far collar (drawn end side) is +Z, near is -Z.
     expect(plan!.branchCollarFar[2]).toBeGreaterThan(0)
@@ -350,8 +350,8 @@ describe('planCrossAtRunBody', () => {
       [0, 0, 0],
       [6, 0, 0],
     ])
-    expect(planCrossAtRunBody(run, bodyHit(run, 0, [0.1, 0, 0]), [0, 0, 1], ROUND_6)).toBeNull()
-    expect(planCrossAtRunBody(run, bodyHit(run, 0, [5.95, 0, 0]), [0, 0, 1], ROUND_6)).toBeNull()
+    expect(planCrossAtRunBody(run, bodyHit(run, 0, [0.1, 0, 0]), [0, 0, 1], ROUND_160)).toBeNull()
+    expect(planCrossAtRunBody(run, bodyHit(run, 0, [5.95, 0, 0]), [0, 0, 1], ROUND_160)).toBeNull()
   })
 
   test('drawn run parallel to the trunk → null', () => {
@@ -359,7 +359,7 @@ describe('planCrossAtRunBody', () => {
       [0, 0, 0],
       [6, 0, 0],
     ])
-    expect(planCrossAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [1, 0, 0], ROUND_6)).toBeNull()
+    expect(planCrossAtRunBody(run, bodyHit(run, 0, [3, 0, 0]), [1, 0, 0], ROUND_160)).toBeNull()
   })
 
   test('rect trunk: cross sized to the equivalent diameter, tail stays rect', () => {
@@ -374,19 +374,19 @@ describe('planCrossAtRunBody', () => {
         [6, 2.4, 0],
       ],
       shape: 'rect',
-      diameter: 6,
-      width: 14,
-      height: 8,
+      diameter: 160,
+      width: 400,
+      height: 200,
       ductMaterial: 'sheet-metal',
       insulationR: 0,
       system: 'supply',
     })
-    const plan = planCrossAtRunBody(rect, bodyHit(rect, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_6)
+    const plan = planCrossAtRunBody(rect, bodyHit(rect, 0, [3, 2.4, 0]), [0, 0, 1], ROUND_160)
     expect(plan).not.toBeNull()
     expect(plan!.fitting.shape).toBe('rect')
-    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((14 * 8) / Math.PI), 6)
+    expect(plan!.fitting.diameter).toBeCloseTo(2 * Math.sqrt((400 * 200) / Math.PI), 6)
     expect(plan!.trunkTail.shape).toBe('rect')
-    expect(plan!.trunkTail.width).toBe(14)
+    expect(plan!.trunkTail.width).toBe(400)
   })
 })
 
@@ -399,8 +399,8 @@ describe('cross ports', () => {
       metadata: {},
       name: 'Cross',
       fittingType: 'cross',
-      diameter: 8,
-      diameter2: 6,
+      diameter: 200,
+      diameter2: 160,
       system: 'supply',
     })
   }
@@ -416,9 +416,10 @@ describe('cross ports', () => {
     expect(dot(outlet.direction, [1, 0, 0])).toBeCloseTo(1, 6)
     expect(dot(branch.direction, [0, 0, 1])).toBeCloseTo(1, 6)
     expect(dot(branch2.direction, [0, 0, -1])).toBeCloseTo(1, 6)
-    expect(inlet.diameter).toBe(8)
-    expect(branch.diameter).toBe(6)
-    expect(branch2.diameter).toBe(6)
+    // Ports advertise their diameter in inches (the cross-kind convention).
+    expect(inlet.diameter).toBeCloseTo(200 / 25.4, 6)
+    expect(branch.diameter).toBeCloseTo(160 / 25.4, 6)
+    expect(branch2.diameter).toBeCloseTo(160 / 25.4, 6)
   })
 })
 
@@ -431,8 +432,8 @@ describe('tee branchAngle (lateral)', () => {
       metadata: {},
       name: 'Tee',
       fittingType: 'tee',
-      diameter: 8,
-      diameter2: 6,
+      diameter: 200,
+      diameter2: 160,
       branchAngle,
       system: 'supply',
     })
@@ -469,7 +470,7 @@ describe('planElbowRealign', () => {
   // A 90° elbow as the draw tool mints it: horizontal run arrives along
   // +X (inlet mated), free outlet pointing +Z.
   function existingElbow() {
-    const plan = planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [0, 0, 1], ROUND_6)!
+    const plan = planElbowAtPort(port([3, 0, 0], [1, 0, 0]), [0, 0, 1], ROUND_160)!
     return plan.fitting
   }
 

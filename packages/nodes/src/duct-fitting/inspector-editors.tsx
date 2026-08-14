@@ -4,10 +4,10 @@ import { ActionButton } from '@pascal-app/editor'
 import { ArrowLeftRight } from 'lucide-react'
 import type { DuctFittingNode } from './schema'
 
-const WIDTH_MIN = 4
-const WIDTH_MAX = 60
-const HEIGHT_MIN = 3
-const HEIGHT_MAX = 40
+const WIDTH_MIN = 100
+const WIDTH_MAX = 2000
+const HEIGHT_MIN = 100
+const HEIGHT_MAX = 2000
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))

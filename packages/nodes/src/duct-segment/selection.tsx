@@ -50,7 +50,7 @@ import { collectScenePorts, DUCT_PORT_SYSTEMS, findNearestPortXZ } from '../shar
 import { planRunTranslationOffsets } from '../shared/run-translation-offset'
 import { HandleCube, MoveChevron, RotateArc } from '../shared/selection-handles'
 import { planVerticalOffsets, type VerticalOffsetResult } from '../shared/vertical-offset'
-import { INCHES_TO_METERS } from './geometry'
+import { MM_TO_METERS } from './geometry'
 
 /** Port-snap radius for dragged run endpoints (meters, XZ). */
 const PORT_SNAP_RADIUS_M = 0.4
@@ -90,8 +90,8 @@ function snap(value: number, step: number): number {
 
 /** Half the run's cross-section (meters) — the arrow stand-off radius. */
 function runRadiusM(duct: DuctSegmentNode): number {
-  if (duct.shape === 'round') return (duct.diameter * INCHES_TO_METERS) / 2
-  return (Math.max(duct.width, duct.height) * INCHES_TO_METERS) / 2
+  if (duct.shape === 'round') return (duct.diameter * MM_TO_METERS) / 2
+  return (Math.max(duct.width, duct.height) * MM_TO_METERS) / 2
 }
 
 type Point = [number, number, number]

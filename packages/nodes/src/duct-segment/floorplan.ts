@@ -1,5 +1,5 @@
 import type { FloorplanGeometry, FloorplanPoint, GeometryContext } from '@pascal-app/core'
-import { INCHES_TO_METERS } from './geometry'
+import { MM_TO_METERS } from './geometry'
 import type { DuctSegmentNode } from './schema'
 
 const SUPPLY_CENTERLINE = '#d4825a'
@@ -38,7 +38,7 @@ export function buildDuctSegmentFloorplan(
   }
 
   // Plan width: rect / oval runs draw at their actual width; round at diameter.
-  const diameterM = (node.shape === 'round' ? node.diameter : node.width) * INCHES_TO_METERS
+  const diameterM = (node.shape === 'round' ? node.diameter : node.width) * MM_TO_METERS
   const view = ctx.viewState
   const palette = view?.palette
   const showSelectedChrome = (view?.selected || view?.highlighted) ?? false

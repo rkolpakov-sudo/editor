@@ -19,6 +19,7 @@ import {
   buildSection,
   createDuctMaterial,
   INCHES_TO_METERS,
+  MM_TO_METERS,
 } from '../duct-segment/geometry'
 import { DUCT_BODY_SLOT_ID } from '../shared/duct-body-paint'
 import { localFittingPorts } from './ports'
@@ -232,10 +233,10 @@ export function buildDuctFittingGeometry(
     colorPreset,
     sceneTheme,
   )
-  const radiusMain = (node.diameter * INCHES_TO_METERS) / 2
+  const radiusMain = (node.diameter * MM_TO_METERS) / 2
   const ports = localFittingPorts(node)
-  const widthM = node.width * INCHES_TO_METERS
-  const heightM = node.height * INCHES_TO_METERS
+  const widthM = node.width * MM_TO_METERS
+  const heightM = node.height * MM_TO_METERS
   // The elbow folds about its local Y. Width spans the XZ bend plane and
   // height rides the hinge ONLY when local Y is world-vertical (a floor
   // turn). For a riser the node is rotated so local Y lands horizontal —
@@ -247,7 +248,7 @@ export function buildDuctFittingGeometry(
   const hingeIsVertical = Math.abs(hingeWorld.y) >= Math.SQRT1_2
 
   if (node.fittingType === 'reducer') {
-    const radiusOut = (node.diameter2 * INCHES_TO_METERS) / 2
+    const radiusOut = (node.diameter2 * MM_TO_METERS) / 2
     const inlet = ports[0]!
     const outlet = ports[1]!
     const taperHalf = Math.abs(inlet.position.x) / 3
@@ -278,7 +279,7 @@ export function buildDuctFittingGeometry(
     // Square-to-round: rect stub on the inlet, lofted gore body through
     // the junction, round stub on the outlet. Same inline layout as the
     // reducer, with the taper replaced by the loft.
-    const radiusOut = (node.diameter2 * INCHES_TO_METERS) / 2
+    const radiusOut = (node.diameter2 * MM_TO_METERS) / 2
     const inlet = ports[0]!
     const outlet = ports[1]!
     const taperHalf = Math.abs(inlet.position.x) / 3
@@ -330,8 +331,8 @@ export function buildDuctFittingGeometry(
     const inlet = ports.find((p) => p.id === 'inlet')!
     const outlet = ports.find((p) => p.id === 'outlet')!
     const branch = ports.find((p) => p.id === 'branch')!
-    const width2M = node.width2 * INCHES_TO_METERS
-    const height2M = node.height2 * INCHES_TO_METERS
+    const width2M = node.width2 * MM_TO_METERS
+    const height2M = node.height2 * MM_TO_METERS
     const buildRunSection = node.shape === 'oval' ? buildOvalSection : buildRectSection
     const run = buildRunSection(
       inlet.position,
@@ -369,8 +370,8 @@ export function buildDuctFittingGeometry(
     // rotated so its local Y lands horizontal.
     const inlet = ports.find((p) => p.id === 'inlet')!
     const outlet = ports.find((p) => p.id === 'outlet')!
-    const width2M = node.width2 * INCHES_TO_METERS
-    const height2M = node.height2 * INCHES_TO_METERS
+    const width2M = node.width2 * MM_TO_METERS
+    const height2M = node.height2 * MM_TO_METERS
     const buildRunSection = node.shape === 'oval' ? buildOvalSection : buildRectSection
     const run = buildRunSection(
       inlet.position,
@@ -441,8 +442,8 @@ export function buildDuctFittingGeometry(
   // mitered solid above.
   const rectLegProfile = (portId: string): [number, number] => {
     if (portId === 'branch' || portId === 'branch2') {
-      const width2M = node.width2 * INCHES_TO_METERS
-      const height2M = node.height2 * INCHES_TO_METERS
+      const width2M = node.width2 * MM_TO_METERS
+      const height2M = node.height2 * MM_TO_METERS
       return hingeIsVertical ? [width2M, height2M] : [height2M, width2M]
     }
     if (!hingeIsVertical) return [heightM, widthM]

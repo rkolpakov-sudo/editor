@@ -105,7 +105,7 @@ describe('port connectivity — DWV pipe family', () => {
       parentId: null,
       visible: true,
       metadata: {},
-      diameter: 6,
+      diameter: 160,
       ductMaterial: 'flex',
       system: 'supply',
       path: [outlet.position, [outlet.position[0] + 3, outlet.position[1], outlet.position[2]]],

@@ -2,16 +2,20 @@ import type { NodePort } from '@pascal-app/core'
 import { Euler, Vector3 } from 'three'
 import type { DuctFittingNode } from './schema'
 
-const INCHES_TO_METERS = 0.0254
+const MM_TO_METERS = 0.001
+// Ports advertise their diameter in INCHES — the cross-kind convention
+// shared with pipe / hvac-equipment / duct-terminal ports. Node dims are
+// millimeters; only the port boundary converts.
+const INCHES_PER_MM = 25.4
 
 /**
  * Collar stub length in meters — how far each port sticks out from the
  * fitting's junction center. Scales with the duct so big trunks get
- * proportionally longer collars, with a floor so 4" fittings stay
- * grabbable.
+ * proportionally longer collars, with a floor so Ø100 fittings stay
+ * grabbable. Takes the nominal diameter in millimeters.
  */
-export function fittingLegLength(diameterInches: number): number {
-  const radius = (diameterInches * INCHES_TO_METERS) / 2
+export function fittingLegLength(diameterMm: number): number {
+  const radius = (diameterMm * MM_TO_METERS) / 2
   return Math.max(0.14, radius * 2.5)
 }
 
@@ -38,13 +42,13 @@ export function localFittingPorts(node: DuctFittingNode): LocalPort[] {
         id: 'inlet',
         position: new Vector3(-main, 0, 0),
         direction: new Vector3(-1, 0, 0),
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
       {
         id: 'outlet',
         position: outDir.clone().multiplyScalar(main),
         direction: outDir,
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
     ]
   }
@@ -62,19 +66,19 @@ export function localFittingPorts(node: DuctFittingNode): LocalPort[] {
         id: 'inlet',
         position: new Vector3(-main, 0, 0),
         direction: new Vector3(-1, 0, 0),
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
       {
         id: 'outlet',
         position: new Vector3(main, 0, 0),
         direction: new Vector3(1, 0, 0),
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
       {
         id: 'branch',
         position: branchDir.clone().multiplyScalar(branch),
         direction: branchDir,
-        diameter: node.diameter2,
+        diameter: node.diameter2 / INCHES_PER_MM,
       },
     ]
   }
@@ -89,25 +93,25 @@ export function localFittingPorts(node: DuctFittingNode): LocalPort[] {
         id: 'inlet',
         position: new Vector3(-main, 0, 0),
         direction: new Vector3(-1, 0, 0),
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
       {
         id: 'outlet',
         position: new Vector3(main, 0, 0),
         direction: new Vector3(1, 0, 0),
-        diameter: node.diameter,
+        diameter: node.diameter / INCHES_PER_MM,
       },
       {
         id: 'branch',
         position: new Vector3(0, 0, branch),
         direction: new Vector3(0, 0, 1),
-        diameter: node.diameter2,
+        diameter: node.diameter2 / INCHES_PER_MM,
       },
       {
         id: 'branch2',
         position: new Vector3(0, 0, -branch),
         direction: new Vector3(0, 0, -1),
-        diameter: node.diameter2,
+        diameter: node.diameter2 / INCHES_PER_MM,
       },
     ]
   }
@@ -119,13 +123,13 @@ export function localFittingPorts(node: DuctFittingNode): LocalPort[] {
       id: 'inlet',
       position: new Vector3(-main, 0, 0),
       direction: new Vector3(-1, 0, 0),
-      diameter: node.diameter,
+      diameter: node.diameter / INCHES_PER_MM,
     },
     {
       id: 'outlet',
       position: new Vector3(main, 0, 0),
       direction: new Vector3(1, 0, 0),
-      diameter: node.diameter2,
+      diameter: node.diameter2 / INCHES_PER_MM,
     },
   ]
 }

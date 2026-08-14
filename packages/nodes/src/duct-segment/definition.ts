@@ -43,7 +43,7 @@ function rollDuctSegment(node: AnyNode, steps: 1 | -1): void {
 
 export const ductSegmentDefinition: NodeDefinition<typeof DuctSegmentNode> = {
   kind: 'duct-segment',
-  schemaVersion: 1,
+  schemaVersion: 2,
   schema: DuctSegmentNode,
   category: 'utility',
   distributionRole: 'run',
@@ -62,9 +62,9 @@ export const ductSegmentDefinition: NodeDefinition<typeof DuctSegmentNode> = {
       [3, 0, 0],
     ],
     shape: 'rect',
-    diameter: 6,
-    width: 14,
-    height: 8,
+    diameter: 160,
+    width: 400,
+    height: 200,
     ductMaterial: 'flex',
     seamDetail: false,
     insulated: false,

@@ -6,13 +6,13 @@ import {
   type PortConnection,
 } from '@pascal-app/core'
 import { getDuctFittingPorts } from '../duct-fitting/ports'
-import { type DuctProfile, planElbowAtPort, profileDiameterIn } from './auto-fitting'
+import { type DuctProfile, planElbowAtPort, profileDiameterMm } from './auto-fitting'
 import type { ScenePort } from './ports'
 import { planVerticalOffsets } from './vertical-offset'
 
 type Point = [number, number, number]
 
-const RECT_PROFILE: DuctProfile = { shape: 'rect', diameter: 6, width: 14, height: 8 }
+const RECT_PROFILE: DuctProfile = { shape: 'rect', diameter: 160, width: 400, height: 200 }
 
 function distSq(a: readonly number[], b: readonly number[]): number {
   const dx = a[0]! - b[0]!
@@ -30,9 +30,9 @@ function rectRun(path: Point[]): DuctSegmentNode {
     name: 'Trunk',
     path,
     shape: 'rect',
-    diameter: 6,
-    width: 14,
-    height: 8,
+    diameter: 160,
+    width: 400,
+    height: 200,
     roll: 0,
     ductMaterial: 'sheet-metal',
     insulationR: 0,
@@ -119,10 +119,10 @@ describe('planVerticalOffsets', () => {
       name: 'Old elbow',
       fittingType: 'elbow',
       shape: 'rect',
-      width: 8,
-      height: 4,
-      diameter: profileDiameterIn({ ...RECT_PROFILE, width: 8, height: 4 }),
-      diameter2: profileDiameterIn({ ...RECT_PROFILE, width: 8, height: 4 }),
+      width: 200,
+      height: 100,
+      diameter: profileDiameterMm({ ...RECT_PROFILE, width: 200, height: 100 }),
+      diameter2: profileDiameterMm({ ...RECT_PROFILE, width: 200, height: 100 }),
       ductMaterial: 'sheet-metal',
       system: 'supply',
       position: [0, 0, 0],
@@ -157,7 +157,7 @@ describe('planVerticalOffsets', () => {
       shape: 'rect',
       width: RECT_PROFILE.width,
       height: RECT_PROFILE.height,
-      diameter: profileDiameterIn(RECT_PROFILE),
+      diameter: profileDiameterMm(RECT_PROFILE),
     })
     expect(elbowUpdate?.data.rotation).toBeDefined()
     expect(elbowUpdate?.data.angle).toBeDefined()
@@ -172,10 +172,10 @@ describe('planVerticalOffsets', () => {
       name: 'Angled elbow',
       fittingType: 'elbow',
       shape: 'rect',
-      width: 8,
-      height: 4,
-      diameter: profileDiameterIn({ ...RECT_PROFILE, width: 8, height: 4 }),
-      diameter2: profileDiameterIn({ ...RECT_PROFILE, width: 8, height: 4 }),
+      width: 200,
+      height: 100,
+      diameter: profileDiameterMm({ ...RECT_PROFILE, width: 200, height: 100 }),
+      diameter2: profileDiameterMm({ ...RECT_PROFILE, width: 200, height: 100 }),
       ductMaterial: 'sheet-metal',
       system: 'supply',
       position: [0, 0, 0],
@@ -235,11 +235,11 @@ describe('planVerticalOffsets', () => {
       shape: 'rect',
       width: RECT_PROFILE.width,
       height: RECT_PROFILE.height,
-      diameter: profileDiameterIn(RECT_PROFILE),
+      diameter: profileDiameterMm(RECT_PROFILE),
       shape2: 'rect',
       width2: RECT_PROFILE.width,
       height2: RECT_PROFILE.height,
-      diameter2: profileDiameterIn(RECT_PROFILE),
+      diameter2: profileDiameterMm(RECT_PROFILE),
       ductMaterial: 'sheet-metal',
       system: 'supply',
       position: [0, 0, 0],
@@ -302,8 +302,8 @@ describe('planVerticalOffsets', () => {
       shape: 'rect',
       width: RECT_PROFILE.width,
       height: RECT_PROFILE.height,
-      diameter: profileDiameterIn(RECT_PROFILE),
-      diameter2: profileDiameterIn(RECT_PROFILE),
+      diameter: profileDiameterMm(RECT_PROFILE),
+      diameter2: profileDiameterMm(RECT_PROFILE),
       ductMaterial: 'sheet-metal',
       system: 'supply',
       position: [0, 2, 0],

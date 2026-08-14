@@ -39,7 +39,7 @@ import {
   Vector3,
 } from 'three'
 import { LineBasicNodeMaterial, MeshBasicNodeMaterial } from 'three/webgpu'
-import { INCHES_TO_METERS } from '../duct-segment/geometry'
+import { MM_TO_METERS } from '../duct-segment/geometry'
 import { autoOffsetInvalidationUpdates } from '../shared/auto-offset-tag'
 import {
   AXIS_VECTORS,
@@ -55,7 +55,7 @@ type Point = [number, number, number]
 /** Stand-off (meters) from the fitting body to each arrow. */
 const ARROW_GAP = 0.14
 const RESIZE_HANDLE_GAP = 0.18
-const RESIZE_STEP_IN = 1
+const RESIZE_STEP_MM = 50
 const RESIZE_GUIDE_DASH = 0.07
 const RESIZE_GUIDE_GAP = 0.045
 const RESIZE_SPHERE_RADIUS = 0.065
@@ -115,7 +115,7 @@ function canResizeRunProfile(node: DuctFittingNode): boolean {
 }
 
 function dimensionBounds(dimension: FittingDimension): { min: number; max: number } {
-  return dimension === 'width' ? { min: 4, max: 60 } : { min: 3, max: 40 }
+  return { min: 100, max: 2000 }
 }
 
 function closestAxisParameterToRay(
@@ -641,9 +641,9 @@ const FittingHandles = ({ fitting, target }: { fitting: DuctFittingNode; target:
       const onMove = (event: PointerEvent) => {
         const rawDeltaM =
           sampleAxisParameter(event.clientX, event.clientY, centerWorld, axisWorld) - start
-        const deltaIn = (rawDeltaM / INCHES_TO_METERS) * 2
-        const nextRaw = baseValue + deltaIn
-        const nextValue = clamp(event.shiftKey ? nextRaw : snap(nextRaw, RESIZE_STEP_IN), min, max)
+        const deltaMm = (rawDeltaM / MM_TO_METERS) * 2
+        const nextRaw = baseValue + deltaMm
+        const nextValue = clamp(event.shiftKey ? nextRaw : snap(nextRaw, RESIZE_STEP_MM), min, max)
         if (nextValue === lastValue) return
         lastValue = nextValue
         current = { [dimension]: nextValue } as Partial<DuctFittingNode>

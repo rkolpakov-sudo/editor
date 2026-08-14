@@ -10,7 +10,7 @@ import {
   type DuctProfile,
   planElbowAtPort,
   planElbowRealign,
-  profileDiameterIn,
+  profileDiameterMm,
 } from './auto-fitting'
 import type { ScenePort } from './ports'
 
@@ -85,7 +85,7 @@ function connectorRun(from: Point, to: Point, duct: DuctSegmentNode): DuctSegmen
 }
 
 function elbowProfilePatch(profile: DuctProfile): Partial<DuctFittingNode> {
-  const diameter = profileDiameterIn(profile)
+  const diameter = profileDiameterMm(profile)
   return {
     shape: profile.shape,
     width: profile.width,
@@ -107,7 +107,7 @@ export function planRunTranslationOffsets(args: {
   if (duct.path.length < 2 || translatedPath.length !== duct.path.length) return null
   if (connections.length === 0) return null
 
-  const leg = fittingLegLength(profileDiameterIn(profile))
+  const leg = fittingLegLength(profileDiameterMm(profile))
   const minOffset = 2 * leg + MIN_CONNECTOR_M
   const eps2 = COINCIDENT_EPS_M * COINCIDENT_EPS_M
   const ductPath = translatedPath.map((p) => [...p] as Point)

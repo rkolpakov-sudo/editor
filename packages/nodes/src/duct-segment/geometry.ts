@@ -26,6 +26,7 @@ import { DUCT_BODY_SLOT_DEFAULT, DUCT_BODY_SLOT_ID } from '../shared/duct-body-p
 import type { DuctSegmentNode } from './schema'
 
 export const INCHES_TO_METERS = 0.0254
+export const MM_TO_METERS = 0.001
 // Insulation wraps the duct in a roughly uniform shell. A strictly physical
 // mapping (fiberglass ≈ R-3.2 per inch) makes low R-values nearly invisible
 // at screen scale — R-1 would add only ~8 mm over a 15 cm duct. So the shell
@@ -49,16 +50,22 @@ const RADIAL_SEGMENTS = 24
 const UP = new Vector3(0, 1, 0)
 
 /**
- * Area-equivalent round diameter (inches) for a rect cross-section —
- * what a rect trunk advertises on its ports so round fittings / branches
- * mate at a sensible size.
+ * Area-equivalent round diameter for a rect cross-section — what a rect
+ * trunk advertises on its ports so round fittings / branches mate at a
+ * sensible size. Inputs and result share the caller's unit (inches for
+ * the legacy `equivalentDiameterIn`, millimeters for `equivalentDiameterMm`).
  */
 export function equivalentDiameterIn(widthIn: number, heightIn: number): number {
   return 2 * Math.sqrt((widthIn * heightIn) / Math.PI)
 }
 
+/** Area-equivalent round diameter (mm) for a rect cross-section. */
+export function equivalentDiameterMm(widthMm: number, heightMm: number): number {
+  return 2 * Math.sqrt((widthMm * heightMm) / Math.PI)
+}
+
 /**
- * Area-equivalent round diameter (inches) for a flat-oval cross-section:
+ * Area-equivalent round diameter for a flat-oval cross-section:
  * a rectangle of (width − height) × height plus the two semicircular caps.
  */
 export function ovalEquivalentDiameterIn(widthIn: number, heightIn: number): number {
@@ -68,20 +75,33 @@ export function ovalEquivalentDiameterIn(widthIn: number, heightIn: number): num
   return 2 * Math.sqrt(area / Math.PI)
 }
 
-/** The diameter (inches) a duct segment presents at its ports. */
-export function ductPortDiameterIn(node: {
+/** Area-equivalent round diameter (mm) for a flat-oval cross-section. */
+export function ovalEquivalentDiameterMm(widthMm: number, heightMm: number): number {
+  const minor = Math.min(widthMm, heightMm)
+  const major = Math.max(widthMm, heightMm)
+  const area = (major - minor) * minor + Math.PI * (minor / 2) ** 2
+  return 2 * Math.sqrt(area / Math.PI)
+}
+
+/** The diameter (mm) a duct segment presents at its ports. */
+export function ductPortDiameterMm(node: {
   shape?: 'round' | 'rect' | 'oval'
   diameter: number
   width?: number
   height?: number
 }): number {
   if (node.shape === 'rect' && node.width && node.height) {
-    return equivalentDiameterIn(node.width, node.height)
+    return equivalentDiameterMm(node.width, node.height)
   }
   if (node.shape === 'oval' && node.width && node.height) {
-    return ovalEquivalentDiameterIn(node.width, node.height)
+    return ovalEquivalentDiameterMm(node.width, node.height)
   }
   return node.diameter
+}
+
+/** The port diameter converted to inches (the port convention). */
+export function ductPortDiameterIn(node: Parameters<typeof ductPortDiameterMm>[0]): number {
+  return ductPortDiameterMm(node) / 25.4
 }
 
 /**
@@ -391,9 +411,9 @@ export function buildDuctSegmentGeometry(
 
   const isRect = node.shape === 'rect'
   const isOval = node.shape === 'oval'
-  const radius = (node.diameter * INCHES_TO_METERS) / 2
-  const widthM = node.width * INCHES_TO_METERS
-  const heightM = node.height * INCHES_TO_METERS
+  const radius = (node.diameter * MM_TO_METERS) / 2
+  const widthM = node.width * MM_TO_METERS
+  const heightM = node.height * MM_TO_METERS
   const ductMaterial = createDuctMaterial(
     node,
     ctx?.materials,

@@ -45,7 +45,7 @@ type Vec3 = [number, number, number]
 
 const GHOST_COLOR = '#818cf8'
 const GHOST_OPACITY = 0.5
-const IN_TO_M = 0.0254
+const MM_TO_M = 0.001
 
 /** Snap a coordinate to the editor's live grid step. */
 function snapToGridStep(value: number): number {
@@ -67,13 +67,13 @@ function pathCenterXZ(path: readonly Vec3[]): [number, number] {
 
 /** Half the run's cross-section (meters) — the box / footprint padding. */
 function runRadiusM(duct: DuctSegmentNode): number {
-  if (duct.shape === 'round') return (duct.diameter * IN_TO_M) / 2
-  return (Math.max(duct.width, duct.height) * IN_TO_M) / 2
+  if (duct.shape === 'round') return (duct.diameter * MM_TO_M) / 2
+  return (Math.max(duct.width, duct.height) * MM_TO_M) / 2
 }
 
 /** The run's vertical box extent (meters). */
 function runHeightM(duct: DuctSegmentNode): number {
-  return (duct.shape === 'round' ? duct.diameter : duct.height) * IN_TO_M
+  return (duct.shape === 'round' ? duct.diameter : duct.height) * MM_TO_M
 }
 
 /** XZ bounds of a path padded by the run's radius. */
@@ -405,8 +405,8 @@ function GhostSegment({ a, b, duct }: { a: Vec3; b: Vec3; duct: DuctSegmentNode 
   const mid = new Vector3().addVectors(start, end).multiplyScalar(0.5)
 
   if (duct.shape !== 'round') {
-    const w = duct.width * IN_TO_M
-    const h = duct.height * IN_TO_M
+    const w = duct.width * MM_TO_M
+    const h = duct.height * MM_TO_M
     return (
       <mesh
         layers={EDITOR_LAYER}
@@ -428,7 +428,7 @@ function GhostSegment({ a, b, duct }: { a: Vec3; b: Vec3; duct: DuctSegmentNode 
     )
   }
 
-  const radius = (duct.diameter * IN_TO_M) / 2
+  const radius = (duct.diameter * MM_TO_M) / 2
   return (
     <mesh
       layers={EDITOR_LAYER}

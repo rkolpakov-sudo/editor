@@ -6,13 +6,13 @@ import {
   type PortConnection,
 } from '@pascal-app/core'
 import { getDuctFittingPorts } from '../duct-fitting/ports'
-import { type DuctProfile, planElbowAtPort, profileDiameterIn } from './auto-fitting'
+import { type DuctProfile, planElbowAtPort, profileDiameterMm } from './auto-fitting'
 import type { ScenePort } from './ports'
 import { planRunTranslationOffsets } from './run-translation-offset'
 
 type Point = [number, number, number]
 
-const RECT_PROFILE: DuctProfile = { shape: 'rect', diameter: 6, width: 14, height: 8 }
+const RECT_PROFILE: DuctProfile = { shape: 'rect', diameter: 160, width: 400, height: 200 }
 
 function rectRun(path: Point[]): DuctSegmentNode {
   return DuctSegmentNode.parse({
@@ -23,9 +23,9 @@ function rectRun(path: Point[]): DuctSegmentNode {
     name: 'Trunk',
     path,
     shape: 'rect',
-    diameter: 6,
-    width: 14,
-    height: 8,
+    diameter: 160,
+    width: 400,
+    height: 200,
     roll: 0,
     ductMaterial: 'sheet-metal',
     insulationR: 0,
@@ -119,8 +119,8 @@ describe('planRunTranslationOffsets', () => {
     if (!elbowPlan) return
     const elbow = DuctFittingNode.parse({
       ...elbowPlan.fitting,
-      diameter: profileDiameterIn(RECT_PROFILE),
-      diameter2: profileDiameterIn(RECT_PROFILE),
+      diameter: profileDiameterMm(RECT_PROFILE),
+      diameter2: profileDiameterMm(RECT_PROFILE),
     })
     const branchPort = getDuctFittingPorts(elbow).find(
       (p) => distSq(p.position, elbowPlan.collarPoint) < 1e-9,

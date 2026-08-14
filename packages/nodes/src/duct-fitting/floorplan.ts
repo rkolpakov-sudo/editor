@@ -1,5 +1,5 @@
 import type { FloorplanGeometry, GeometryContext } from '@pascal-app/core'
-import { INCHES_TO_METERS } from '../duct-segment/geometry'
+import { INCHES_TO_METERS, MM_TO_METERS } from '../duct-segment/geometry'
 import { getDuctFittingPorts } from './ports'
 import type { DuctFittingNode } from './schema'
 
@@ -50,7 +50,7 @@ export function buildDuctFittingFloorplan(
     kind: 'circle',
     cx,
     cy: cz,
-    r: (node.diameter * INCHES_TO_METERS) / 2 + 0.015,
+    r: (node.diameter * MM_TO_METERS) / 2 + 0.015,
     fill: bodyStroke,
     stroke: accent,
     strokeWidth: 1.5,

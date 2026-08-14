@@ -13,7 +13,7 @@ import {
   type ElbowJointPlan,
   planElbowAtPort,
   planElbowRealign,
-  profileDiameterIn,
+  profileDiameterMm,
 } from './auto-fitting'
 import type { ScenePort } from './ports'
 
@@ -503,7 +503,7 @@ function planElbowFromCollar(args: {
   profile: DuctProfile
 }): ElbowJointPlan | null {
   const { collarPoint, elbowPortOutDir, awayDir, duct, profile } = args
-  const leg = fittingLegLength(profileDiameterIn(profile))
+  const leg = fittingLegLength(profileDiameterMm(profile))
   const junction: Point = [
     collarPoint[0] - elbowPortOutDir[0] * leg,
     collarPoint[1] - elbowPortOutDir[1] * leg,
@@ -514,7 +514,7 @@ function planElbowFromCollar(args: {
 }
 
 function elbowProfilePatch(profile: DuctProfile): Partial<DuctFittingNode> {
-  const diameter = profileDiameterIn(profile)
+  const diameter = profileDiameterMm(profile)
   return {
     shape: profile.shape,
     width: profile.width,
@@ -778,7 +778,7 @@ function planVerticalOffsetsAtDy(
   const dy = routeDy
   // No connected ends: nothing to weld, so the caller plain-translates the run.
   if (connections.length === 0) return null
-  const leg = fittingLegLength(profileDiameterIn(profile))
+  const leg = fittingLegLength(profileDiameterMm(profile))
   // A connected end that must MINT an offset (two elbows + a real riser) needs
   // room for both legs plus a non-degenerate riser. Checked per-end below, not
   // globally — a partner that's already a vertical riser just STRETCHES and
@@ -839,7 +839,7 @@ function planVerticalOffsetsAtDy(
           partnerPort.direction[1],
           partnerPort.direction[2],
         ]
-        const leg = fittingLegLength(profileDiameterIn(profile))
+        const leg = fittingLegLength(profileDiameterMm(profile))
         const ductCollar: Point = [
           liftedEnd[0] - ductPortDir[0] * leg * 2,
           liftedEnd[1] - ductPortDir[1] * leg * 2,

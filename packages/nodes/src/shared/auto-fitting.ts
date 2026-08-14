@@ -7,9 +7,9 @@ import {
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { fittingLegLength } from '../duct-fitting/ports'
 import {
-  ductPortDiameterIn,
-  equivalentDiameterIn,
-  ovalEquivalentDiameterIn,
+  ductPortDiameterMm,
+  equivalentDiameterMm,
+  ovalEquivalentDiameterMm,
 } from '../duct-segment/geometry'
 import { pipeFittingLegLength } from '../pipe-fitting/ports'
 import type { RunBodyHit, ScenePort } from './ports'
@@ -27,20 +27,20 @@ type Point = [number, number, number]
 /** Cross-section a planned fitting (and the duct drawing it) carries. */
 export type DuctProfile = {
   shape: 'round' | 'rect' | 'oval'
-  /** Round size in inches (ignored for rect / oval — the equivalent is derived). */
+  /** Round size in millimeters (ignored for rect / oval — the equivalent is derived). */
   diameter: number
-  /** Rect / oval profile in inches. */
+  /** Rect / oval profile in millimeters. */
   width: number
   height: number
 }
 
-/** Effective round-size (inches) a profile presents at joints. */
-export function profileDiameterIn(profile: DuctProfile): number {
+/** Effective round-size (mm) a profile presents at joints. */
+export function profileDiameterMm(profile: DuctProfile): number {
   if (profile.shape === 'rect') {
-    return Math.min(48, equivalentDiameterIn(profile.width, profile.height))
+    return Math.min(2000, equivalentDiameterMm(profile.width, profile.height))
   }
   if (profile.shape === 'oval') {
-    return Math.min(48, ovalEquivalentDiameterIn(profile.width, profile.height))
+    return Math.min(2000, ovalEquivalentDiameterMm(profile.width, profile.height))
   }
   return profile.diameter
 }
@@ -146,7 +146,7 @@ export function planElbowAtPort(
   awayDir: Point,
   profile: DuctProfile,
 ): ElbowJointPlan | null {
-  const joint = planCornerJoint(port, awayDir, fittingLegLength(profileDiameterIn(profile)))
+  const joint = planCornerJoint(port, awayDir, fittingLegLength(profileDiameterMm(profile)))
   if (!joint) return null
 
   const system = port.system === 'return' ? 'return' : 'supply'
@@ -164,8 +164,8 @@ export function planElbowAtPort(
     width: profile.width,
     height: profile.height,
     angle: joint.angleDeg,
-    diameter: profileDiameterIn(profile),
-    diameter2: profileDiameterIn(profile),
+    diameter: profileDiameterMm(profile),
+    diameter2: profileDiameterMm(profile),
     // Corner elbows are sheet metal even on flex runs (adjustable elbows).
     ductMaterial: 'sheet-metal',
     system,
@@ -259,11 +259,11 @@ export function planTeeAtRunBody(
   // Room check: both run legs must fit inside the hit segment with a
   // margin of real duct on each side.
   // Rect trunks present their area-equivalent round size at joints
-  // (clamped to the fitting schema's 48" ceiling).
-  const trunkDiameterIn = Math.min(48, ductPortDiameterIn(trunk))
-  const branchDiameterIn = Math.min(48, profileDiameterIn(branch))
-  const legRun = fittingLegLength(trunkDiameterIn)
-  const legBranch = fittingLegLength(branchDiameterIn)
+  // (clamped to the fitting schema's 2000 mm ceiling).
+  const trunkDiameterMm = Math.min(2000, ductPortDiameterMm(trunk))
+  const branchDiameterMm = Math.min(2000, profileDiameterMm(branch))
+  const legRun = fittingLegLength(trunkDiameterMm)
+  const legBranch = fittingLegLength(branchDiameterMm)
   const P = new Vector3(...hit.point)
   const upstream = P.distanceTo(new Vector3(...a))
   const downstream = P.distanceTo(new Vector3(...b))
@@ -295,11 +295,11 @@ export function planTeeAtRunBody(
     shape: trunk.shape,
     width: trunk.width,
     height: trunk.height,
-    diameter: trunkDiameterIn,
+    diameter: trunkDiameterMm,
     shape2: branch.shape,
     width2: branch.width,
     height2: branch.height,
-    diameter2: branchDiameterIn,
+    diameter2: branchDiameterMm,
     branchAngle: branchAngleDeg,
     ductMaterial: 'sheet-metal',
     system: trunk.system,
@@ -398,10 +398,10 @@ export function planCrossAtRunBody(
   if (branchDir.lengthSq() < 1e-6) return null
   branchDir.normalize()
 
-  const trunkDiameterIn = Math.min(48, ductPortDiameterIn(trunk))
-  const branchDiameterIn = Math.min(48, profileDiameterIn(branch))
-  const legRun = fittingLegLength(trunkDiameterIn)
-  const legBranch = fittingLegLength(branchDiameterIn)
+  const trunkDiameterMm = Math.min(2000, ductPortDiameterMm(trunk))
+  const branchDiameterMm = Math.min(2000, profileDiameterMm(branch))
+  const legRun = fittingLegLength(trunkDiameterMm)
+  const legBranch = fittingLegLength(branchDiameterMm)
   const P = new Vector3(...hit.point)
   const upstream = P.distanceTo(new Vector3(...a))
   const downstream = P.distanceTo(new Vector3(...b))
@@ -434,11 +434,11 @@ export function planCrossAtRunBody(
     shape: trunk.shape,
     width: trunk.width,
     height: trunk.height,
-    diameter: trunkDiameterIn,
+    diameter: trunkDiameterMm,
     shape2: branch.shape,
     width2: branch.width,
     height2: branch.height,
-    diameter2: branchDiameterIn,
+    diameter2: branchDiameterMm,
     ductMaterial: 'sheet-metal',
     system: trunk.system,
     position: [P.x, P.y, P.z],

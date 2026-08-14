@@ -85,8 +85,8 @@ import { ductPortDiameterIn, rectSectionAxes, rollToContinueAcrossElbow } from '
  *     the snapping mode.
  *   - Hold **Alt** → vertical mode. Cursor XZ locks to the start;
  *     vertical mouse motion drives Y. Click commits the riser segment.
- *   - **[ / ]** step the duct diameter through nominal US sizes; the
- *     ghost preview and the committed node both use it.
+ *   - **[ / ]** step the duct diameter through the GOST R 70349 round
+ *     row; the ghost preview and the committed node both use it.
  *   - **C** toggles ceiling-level placement: each point lands just below
  *     the ceiling actually covering it (duct top hugging that ceiling)
  *     instead of the floor, so a run tracks per-room ceiling heights.
@@ -95,10 +95,17 @@ import { ductPortDiameterIn, rectSectionAxes, rollToContinueAcrossElbow } from '
  */
 const PREVIEW_OPACITY = 0.55
 /**
- * Nominal US round-duct sizes (inches): 4"–10" in 1" steps, 12"+ in 2"
- * steps — matches what flex and rigid round actually ship in.
+ * Nominal round-duct sizes (mm) on the GOST R 70349 row: Ø100–500 in the
+ * standard steps, Ø630+ in wider steps — matches what spiral round and
+ * rigid ducts actually ship in.
  */
-const DUCT_DIAMETERS_IN = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20] as const
+const DUCT_DIAMETERS_MM = [
+  100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000,
+] as const
+/** Clamp a duct cross-section dimension to the schema's mm range. */
+function clampDuctMm(value: number): number {
+  return Math.min(2000, Math.max(100, value))
+}
 /** Snap radius (meters) for joining onto an existing duct's start/end. */
 const ENDPOINT_SNAP_RADIUS_M = 0.5
 /** Snap radius (meters) for tapping the SIDE of an existing run — a tee
@@ -237,9 +244,8 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
   if (owner.type === 'duct-segment' || owner.type === 'duct-fitting') {
     return {
       shape: owner.shape,
-      diameter: Math.min(
-        48,
-        Math.max(2, owner.type === 'duct-segment' ? owner.diameter : port.diameter),
+      diameter: clampDuctMm(
+        owner.type === 'duct-segment' ? owner.diameter : owner.diameter,
       ),
       width: owner.width,
       height: owner.height,
@@ -249,18 +255,18 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
     const defaults = ductSegmentDefinition.defaults() as DraftProfile
     // Adopt the collar's cross-section so the run leaves a rect / oval
     // plenum as rect / oval (rolled to match in `continuityRollFrom`),
-    // falling back to round at the advertised diameter.
+    // falling back to round at the advertised diameter (ported in inches).
     if (port.shape && port.shape !== 'round') {
       return {
         shape: port.shape,
-        diameter: Math.min(48, Math.max(2, port.diameter)),
+        diameter: clampDuctMm(port.diameter * 25.4),
         width: port.width ?? defaults.width,
         height: port.height ?? defaults.height,
       }
     }
     return {
       shape: 'round',
-      diameter: Math.min(48, Math.max(2, port.diameter)),
+      diameter: clampDuctMm(port.diameter * 25.4),
       width: defaults.width,
       height: defaults.height,
     }
@@ -501,7 +507,7 @@ const DuctSegmentTool = () => {
   // Cross-section profile for the next committed segment. Q toggles
   // round/rect, [ / ] steps the round diameter, and snapping the start
   // onto an existing run / fitting INHERITS that node's profile — so
-  // continuing a 14×8 trunk keeps drawing 14×8, and branching off a
+  // continuing a 400×200 trunk keeps drawing 400×200, and branching off a
   // round collar keeps its diameter. Seeded from `toolDefaults`.
   const [profile, setProfile] = useState<DraftProfile>(() => {
     const defaults = ductSegmentDefinition.defaults() as DraftProfile
@@ -651,8 +657,8 @@ const DuctSegmentTool = () => {
       const ceiling = getCeilingHeightAt(activeLevelId, useScene.getState().nodes, x, z)
       if (ceiling === null) return 0
       const p = profileRef.current
-      const verticalIn = p.shape === 'round' ? p.diameter : p.height
-      return Math.max(0, ceiling - (verticalIn * 0.0254) / 2)
+      const verticalM = p.shape === 'round' ? p.diameter / 1000 : p.height / 1000
+      return Math.max(0, ceiling - verticalM / 2)
     }
 
     const resolveSnappedPoint = (
@@ -868,10 +874,10 @@ const DuctSegmentTool = () => {
     }
 
     const stepDiameter = (step: 1 | -1) => {
-      const sizes = DUCT_DIAMETERS_IN
+      const sizes = DUCT_DIAMETERS_MM
       const current = profileRef.current.diameter
       // Nearest catalogue index, then step — handles seeded off-catalogue
-      // values (e.g. a preset's 7.5") gracefully.
+      // values (e.g. a preset's 175 mm) gracefully.
       let nearest = 0
       for (let i = 1; i < sizes.length; i++) {
         if (Math.abs(sizes[i]! - current) < Math.abs(sizes[nearest]! - current)) nearest = i
@@ -972,10 +978,10 @@ const DuctSegmentTool = () => {
           signed: !!last,
         })),
         ...(profile.shape === 'round'
-          ? [{ key: 'diameter', prefix: 'Ø', value: profile.diameter * 0.0254, signed: false }]
+          ? [{ key: 'diameter', prefix: 'Ø', value: profile.diameter / 1000, signed: false }]
           : [
-              { key: 'trunk-w', prefix: 'W', value: profile.width * 0.0254, signed: false },
-              { key: 'trunk-h', prefix: 'H', value: profile.height * 0.0254, signed: false },
+              { key: 'trunk-w', prefix: 'W', value: profile.width / 1000, signed: false },
+              { key: 'trunk-h', prefix: 'H', value: profile.height / 1000, signed: false },
             ]),
       ]
     : null
@@ -1182,8 +1188,8 @@ function PreviewSegment({
 
   // Rect AND oval ghost as a box — close enough for a translucent guide.
   if (profile.shape !== 'round') {
-    const w = profile.width * 0.0254
-    const h = profile.height * 0.0254
+    const w = profile.width / 1000
+    const h = profile.height / 1000
     return (
       <mesh
         layers={EDITOR_LAYER}
@@ -1208,7 +1214,7 @@ function PreviewSegment({
     )
   }
 
-  const radius = (profile.diameter * 0.0254) / 2
+  const radius = (profile.diameter / 1000) / 2
   return (
     <mesh
       layers={EDITOR_LAYER}

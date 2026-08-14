@@ -14,29 +14,14 @@ import {
 import { DuctFittingSizeSwapEditor } from './inspector-editors'
 import { getDuctFittingPorts } from './ports'
 import type { DuctFittingNode } from './schema'
+import {
+  ductPortDiameterMm,
+  equivalentDiameterMm,
+  ovalEquivalentDiameterMm,
+} from '../duct-segment/geometry'
 
 /** Schema bounds for `diameter` / `diameter2`. */
-const clampDiameter = (d: number) => Math.min(48, Math.max(2, d))
-
-const equivalentDiameterIn = (widthIn: number, heightIn: number): number =>
-  2 * Math.sqrt((widthIn * heightIn) / Math.PI)
-
-const ovalEquivalentDiameterIn = (widthIn: number, heightIn: number): number => {
-  const minor = Math.min(widthIn, heightIn)
-  const major = Math.max(widthIn, heightIn)
-  const area = (major - minor) * minor + Math.PI * (minor / 2) ** 2
-  return 2 * Math.sqrt(area / Math.PI)
-}
-
-const ductPortDiameterIn = (node: DuctSegmentNode): number => {
-  if (node.shape === 'rect' && node.width && node.height) {
-    return equivalentDiameterIn(node.width, node.height)
-  }
-  if (node.shape === 'oval' && node.width && node.height) {
-    return ovalEquivalentDiameterIn(node.width, node.height)
-  }
-  return node.diameter
-}
+const clampDiameter = (d: number) => Math.min(2000, Math.max(100, d))
 
 /** A duct endpoint sitting this close to a collar counts as mated. */
 const MATE_TOL_M = 0.05
@@ -116,7 +101,7 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         out.height = run.height
       } else if (next.shape === 'round' && run && run.shape !== 'rect') {
         // Oval runs present their area-equivalent round size.
-        out.diameter = clampDiameter(ductPortDiameterIn(run))
+        out.diameter = clampDiameter(ductPortDiameterMm(run))
       }
       if (next.fittingType === 'tee' || next.fittingType === 'cross') {
         // A cross's two branches share one profile — size off whichever
@@ -127,7 +112,7 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
           out.width2 = branchDuct.width
           out.height2 = branchDuct.height
         } else if (branchDuct) {
-          out.diameter2 = clampDiameter(ductPortDiameterIn(branchDuct))
+          out.diameter2 = clampDiameter(ductPortDiameterMm(branchDuct))
         }
       }
     }
@@ -136,12 +121,12 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
     // always the rect end regardless of `shape`.
     const runShape = next.fittingType === 'transition' ? 'rect' : next.shape
     if (runShape !== 'round' && next.fittingType !== 'reducer') {
-      const equivalent = runShape === 'oval' ? ovalEquivalentDiameterIn : equivalentDiameterIn
+      const equivalent = runShape === 'oval' ? ovalEquivalentDiameterMm : equivalentDiameterMm
       out.diameter = clampDiameter(equivalent(out.width ?? next.width, out.height ?? next.height))
     }
     const shape2 = out.shape2 ?? next.shape2
     if ((next.fittingType === 'tee' || next.fittingType === 'cross') && shape2 !== 'round') {
-      const equivalent2 = shape2 === 'oval' ? ovalEquivalentDiameterIn : equivalentDiameterIn
+      const equivalent2 = shape2 === 'oval' ? ovalEquivalentDiameterMm : equivalentDiameterMm
       out.diameter2 = clampDiameter(
         equivalent2(out.width2 ?? next.width2, out.height2 ?? next.height2),
       )
@@ -265,10 +250,10 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'diameter',
           kind: 'number',
-          unit: 'in',
-          min: 4,
-          max: 24,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           // Hidden when the run legs are rect / oval (transition's inlet
           // always is) — `diameter` is then derived as the area equivalent.
           visibleIf: (n) =>
@@ -277,20 +262,20 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'width',
           kind: 'number',
-          unit: 'in',
-          min: 4,
-          max: 60,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           visibleIf: (n) =>
             n.fittingType === 'transition' || (n.shape !== 'round' && n.fittingType !== 'reducer'),
         },
         {
           key: 'height',
           kind: 'number',
-          unit: 'in',
-          min: 3,
-          max: 40,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           visibleIf: (n) =>
             n.fittingType === 'transition' || (n.shape !== 'round' && n.fittingType !== 'reducer'),
         },
@@ -311,10 +296,10 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'diameter2',
           kind: 'number',
-          unit: 'in',
-          min: 4,
-          max: 24,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           visibleIf: (n) =>
             n.fittingType !== 'elbow' &&
             (n.fittingType !== 'tee' || n.shape2 === 'round') &&
@@ -323,20 +308,20 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'width2',
           kind: 'number',
-          unit: 'in',
-          min: 4,
-          max: 60,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           visibleIf: (n) =>
             (n.fittingType === 'tee' || n.fittingType === 'cross') && n.shape2 !== 'round',
         },
         {
           key: 'height2',
           kind: 'number',
-          unit: 'in',
-          min: 3,
-          max: 40,
-          step: 1,
+          unit: 'mm',
+          min: 100,
+          max: 2000,
+          step: 5,
           visibleIf: (n) =>
             (n.fittingType === 'tee' || n.fittingType === 'cross') && n.shape2 !== 'round',
         },

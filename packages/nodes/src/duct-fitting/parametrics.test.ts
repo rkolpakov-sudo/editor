@@ -13,8 +13,8 @@ let ductFittingParametrics: typeof import('./parametrics')['ductFittingParametri
 
 type Point = [number, number, number]
 
-function equivalentDiameterIn(widthIn: number, heightIn: number): number {
-  return 2 * Math.sqrt((widthIn * heightIn) / Math.PI)
+function equivalentDiameterMm(widthMm: number, heightMm: number): number {
+  return 2 * Math.sqrt((widthMm * heightMm) / Math.PI)
 }
 
 function rectElbow() {
@@ -27,10 +27,10 @@ function rectElbow() {
     name: 'Resize elbow',
     fittingType: 'elbow',
     shape: 'rect',
-    width: 14,
-    height: 8,
-    diameter: equivalentDiameterIn(14, 8),
-    diameter2: equivalentDiameterIn(14, 8),
+    width: 400,
+    height: 200,
+    diameter: equivalentDiameterMm(400, 200),
+    diameter2: equivalentDiameterMm(400, 200),
     ductMaterial: 'sheet-metal',
     system: 'supply',
     position: [0, 0, 0],
@@ -49,9 +49,9 @@ function verticalRectRunFrom(point: Point, roll: number) {
     name: 'Drawn vertical run',
     path: [point, [point[0], point[1] + 3, point[2]]],
     shape: 'rect',
-    width: 14,
-    height: 8,
-    diameter: equivalentDiameterIn(14, 8),
+    width: 400,
+    height: 200,
+    diameter: equivalentDiameterMm(400, 200),
     roll,
     ductMaterial: 'sheet-metal',
     insulationR: 0,
@@ -95,7 +95,7 @@ describe('ductFittingParametrics', () => {
       readOnly: false,
     } as never)
 
-    const patch = { width: 20 }
+    const patch = { width: 560 }
     const derived = ductFittingParametrics.derive?.({ ...fitting, ...patch }, patch) ?? {}
     const next = DuctFittingNode.parse({ ...fitting, ...patch, ...derived })
     const updates = ductFittingParametrics.reconcile?.(fitting, next) ?? []
@@ -131,7 +131,7 @@ describe('ductFittingParametrics', () => {
       readOnly: false,
     } as never)
 
-    const patch = { width: 20 }
+    const patch = { width: 560 }
     const derived = ductFittingParametrics.derive?.({ ...fitting, ...patch }, patch) ?? {}
     const next = DuctFittingNode.parse({ ...fitting, ...patch, ...derived })
     const updates = ductFittingParametrics.reconcile?.(fitting, next) ?? []
@@ -260,7 +260,7 @@ describe('ductFittingParametrics', () => {
       readOnly: false,
     } as never)
 
-    const patch = { width: 20 }
+    const patch = { width: 560 }
     const derived = ductFittingParametrics.derive?.({ ...fitting, ...patch }, patch) ?? {}
     const next = DuctFittingNode.parse({ ...fitting, ...patch, ...derived })
     const updates = ductFittingParametrics.reconcile?.(fitting, next) ?? []
