@@ -81,6 +81,7 @@ import { SiteEdgeLabels } from './site-edge-labels'
 import { SlabHoleHighlights } from './slab-hole-highlights'
 import { SnapshotCaptureOverlay } from './snapshot-capture-overlay'
 import { type SnapshotCameraData, ThumbnailGenerator } from './thumbnail-generator'
+import { VentilationPanel } from './ventilation-panel'
 import { WallMeasurementLabel } from './wall-measurement-label'
 import { WallMoveSideHandles } from './wall-move-side-handles'
 import { WallOpeningHighlights } from './wall-opening-highlights'
@@ -1462,6 +1463,7 @@ export default function Editor({
                       onExit={() => useEditor.getState().setFirstPersonMode(false)}
                     />
                   )}
+                  <VentilationPanel />
                   {viewerBanner}
                   {projectId ? <SnapshotCaptureOverlay projectId={projectId} /> : null}
                 </>
@@ -1537,6 +1539,7 @@ export default function Editor({
               <HelperManager />
             </div>
             <RiserDiagramPanel />
+            <VentilationPanel />
             {isFirstPersonMode && (
               <FirstPersonOverlay onExit={() => useEditor.getState().setFirstPersonMode(false)} />
             )}

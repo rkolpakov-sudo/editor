@@ -50,6 +50,7 @@ import {
   SwatchBook,
   Tag,
   Undo2,
+  Wind,
 } from 'lucide-react'
 import Image from 'next/image'
 import { type ReactNode, useCallback, useEffect, useState } from 'react'
@@ -692,6 +693,29 @@ function PreviewButton() {
   )
 }
 
+// MEP «Вентиляция» panel toggle — systems П/В, автообвод пересечений,
+// сводка потерь (Этап 5 MEP).
+function VentilationButton() {
+  const isVentilationOpen = useEditor((state) => state.isVentilationOpen)
+  const toggleVentilationOpen = useEditor((state) => state.toggleVentilationOpen)
+  return (
+    <ToolbarTooltip label="Вентиляция — системы П/В и автообвод">
+      <button
+        aria-label="Вентиляция"
+        aria-pressed={isVentilationOpen}
+        className={cn(
+          TOOLBAR_BTN,
+          isVentilationOpen && 'bg-sky-500/15 text-sky-400 hover:bg-sky-500/20',
+        )}
+        onClick={toggleVentilationOpen}
+        type="button"
+      >
+        <Wind className="h-4 w-4" />
+      </button>
+    </ToolbarTooltip>
+  )
+}
+
 // Undo/Redo toolbar controls. They subscribe to the shared history state
 // (`history.ts`) so buttons enable/disable as the scene history grows, and
 // route through `runUndo`/`runRedo` so they honor a collaborative host
@@ -769,6 +793,7 @@ export function CommunityViewerToolbarRight() {
       <DisplayMenu />
       <div className="my-1.5 w-px bg-border/50" />
       <WalkthroughButton />
+      <VentilationButton />
       <PreviewButton />
     </div>
   )

@@ -1,6 +1,16 @@
-import type { FloorplanGeometry, FloorplanPoint, GeometryContext } from '@pascal-app/core'
+import type {
+  AnyNodeId,
+  FloorplanGeometry,
+  FloorplanPoint,
+  GeometryContext,
+} from '@pascal-app/core'
 import { MM_TO_METERS } from './geometry'
 import type { DuctSegmentNode } from './schema'
+
+/** П1/В1/Р1 marking shared per level (from `computeFloorplanLevelData`). */
+export type DuctSegmentFloorplanLevelData = {
+  markings: Record<AnyNodeId, string>
+}
 
 const SUPPLY_CENTERLINE = '#d4825a'
 const EXHAUST_CENTERLINE = '#5ab46a'
@@ -93,6 +103,31 @@ export function buildDuctSegmentFloorplan(
       opacity: 0.9,
     },
   ]
+
+  // П1/В1/Р1 marking (ГОСТ 21.602) at the run midpoint — tinted by system,
+  // kept upright so the plan reads the label horizontally.
+  const levelData = ctx.levelData as DuctSegmentFloorplanLevelData | undefined
+  const marking = levelData?.markings?.[node.id]
+  if (marking) {
+    const mid = points[Math.floor(points.length / 2)] ?? points[0]
+    if (mid) {
+      children.push({
+        kind: 'text',
+        x: mid[0],
+        y: mid[1],
+        text: marking,
+        fontSize: 0.22,
+        fill: centerline,
+        fontWeight: 600,
+        textAnchor: 'middle',
+        dominantBaseline: 'middle',
+        upright: true,
+        stroke: '#1e293b',
+        strokeWidth: 0.045,
+        paintOrder: 'stroke',
+      })
+    }
+  }
 
   // Selection chrome: one draggable handle per path vertex (2D twin of the
   // 3D selection handles). Routes to the shared `move-path-point` affordance.

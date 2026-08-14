@@ -3,6 +3,8 @@
 import {
   deriveZoneQuantityReport,
   resolveAutoZonePolygon,
+  resolveRequiredAirflowM3h,
+  SPACE_CATEGORIES,
   useLiveNodeOverrides,
   useScene,
   type ZoneNode,
@@ -316,6 +318,89 @@ function RoomDocumentationPanel({ zone }: { zone: ZoneNode }) {
   )
 }
 
+const SPACE_CATEGORY_LABELS: Record<string, string> = {
+  kitchen_gas: 'Кухня (газ)',
+  kitchen_electric: 'Кухня (электр.)',
+  bath: 'Ванная',
+  toilet: 'Туалет',
+  combined_wc: 'Совмещённый санузел',
+  living: 'Жилая комната',
+  office_short: 'Офис <2000 ч',
+  office_permanent: 'Офис постоянный',
+  public: 'Общественное (по заданию)',
+  industrial: 'Промышленное (по заданию)',
+}
+
+const SPACE_CATEGORY_RATES: Record<string, string> = {
+  kitchen_gas: '90 м³/ч',
+  kitchen_electric: '60 м³/ч',
+  bath: '25 м³/ч',
+  toilet: '25 м³/ч',
+  combined_wc: '50 м³/ч',
+  living: '3 м³/ч·м²',
+  office_short: '20 м³/ч·чел',
+  office_permanent: '60 м³/ч·чел',
+  public: 'по заданию',
+  industrial: 'по заданию',
+}
+
+// ── MEP: ventilation airflow by room category (СП 54/СП 60) ───────────────
+
+const EXHAUST_CATEGORIES = new Set([
+  'kitchen_gas',
+  'kitchen_electric',
+  'bath',
+  'toilet',
+  'combined_wc',
+])
+
+function VentilationSection({ zone, areaM2 }: { zone: ZoneNode; areaM2: number | null }) {
+  const updateNode = useScene((state) => state.updateNode)
+  const update = (patch: Partial<ZoneNode>) => updateNode(zone.id, patch)
+  const airflow = resolveRequiredAirflowM3h(zone.spaceCategory, { areaM2: areaM2 ?? undefined })
+  const isExhaust = EXHAUST_CATEGORIES.has(zone.spaceCategory)
+
+  return (
+    <PanelSection title="Вентиляция · воздухообмен">
+      <RoomSelect
+        label="Тип помещения"
+        onChange={(spaceCategory) =>
+          update({ spaceCategory: spaceCategory as ZoneNode['spaceCategory'] })
+        }
+        options={SPACE_CATEGORIES.map((category) => ({
+          label: SPACE_CATEGORY_LABELS[category] ?? category,
+          value: category,
+        }))}
+        value={zone.spaceCategory}
+      />
+      <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
+        <span className="text-muted-foreground">Норма воздухообмена</span>
+        <span className="font-mono font-medium text-foreground">
+          {SPACE_CATEGORY_RATES[zone.spaceCategory] ?? zone.spaceCategory}
+        </span>
+      </div>
+      <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
+        <span className="text-muted-foreground">Требуемый расход</span>
+        <span className="font-mono font-semibold text-sky-300">
+          {airflow !== null ? `${Math.round(airflow)} м³/ч` : 'по заданию'}
+        </span>
+      </div>
+      <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
+        <span className="text-muted-foreground">Система</span>
+        <span className="font-mono font-medium text-foreground">
+          {isExhaust ? 'В (вытяжка)' : 'П (приток)'}
+        </span>
+      </div>
+      {areaM2 !== null && (
+        <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
+          <span className="text-muted-foreground">Площадь пола</span>
+          <span className="font-mono font-medium text-foreground">{areaM2.toFixed(2)} м²</span>
+        </div>
+      )}
+    </PanelSection>
+  )
+}
+
 export default function ZoneQuantitiesPanel() {
   const selectedZoneId = useViewer((state) => state.selection.zoneId)
   const unit = useViewer((state) => state.unit)
@@ -361,6 +446,7 @@ export default function ZoneQuantitiesPanel() {
   return (
     <>
       <RoomDocumentationPanel zone={effectiveZone} />
+      <VentilationSection areaM2={report.footprintArea} zone={effectiveZone} />
       <PanelSection
         title={effectiveZone.spaceRole === 'room' ? 'Room quantities' : 'Zone quantities'}
       >

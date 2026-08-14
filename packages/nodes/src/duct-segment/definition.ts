@@ -1,4 +1,10 @@
-import { type AnyNode, type NodeDefinition, useScene } from '@pascal-app/core'
+import {
+  type AnyNode,
+  type AnyNodeId,
+  type NodeDefinition,
+  planSystemMarkings,
+  useScene,
+} from '@pascal-app/core'
 import { ductBodyPaint, ductBodySlots } from '../shared/duct-body-paint'
 import { createPathPointMoveAffordance } from '../shared/path-point-affordance'
 import { createSegmentMoveAffordance } from '../shared/path-segment-affordance'
@@ -150,6 +156,13 @@ export const ductSegmentDefinition: NodeDefinition<typeof DuctSegmentNode> = {
   },
 
   floorplan: buildDuctSegmentFloorplan,
+
+  // П1/В1/Р1 marking for the level's duct runs — computed once per level
+  // from the scene-wide duct networks, shared by every segment's
+  // `def.floorplan` call (planSystemMarkings is O(networks) per level).
+  computeFloorplanLevelData: ({ nodes }) => ({
+    markings: planSystemMarkings(nodes as Record<AnyNodeId, AnyNode>),
+  }),
 
   // 2D selection-time path-point handles — the floor-plan twin of the 3D
   // `affordanceTools.selection` handles. The builder emits an

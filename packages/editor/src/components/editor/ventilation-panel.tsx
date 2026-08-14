@@ -1,0 +1,270 @@
+'use client'
+
+import {
+  buildDuctNetworks,
+  planAllBypasses,
+  planSystemMarkings,
+  useScene,
+  validateDuctNetwork,
+} from '@pascal-app/core'
+import { AlertTriangle, Check, Wind, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { applyAllBypasses, type BypassApplyReport } from '../../lib/mep-actions'
+import { cn } from '../../lib/utils'
+import useEditor from '../../store/use-editor'
+
+const SUPPLY_COLOR = '#d4825a'
+const EXHAUST_COLOR = '#5ab46a'
+const RETURN_COLOR = '#5a8ad4'
+
+const SYSTEM_META: Record<string, { letter: string; color: string; label: string }> = {
+  supply: { letter: 'П', color: SUPPLY_COLOR, label: 'Приток' },
+  exhaust: { letter: 'В', color: EXHAUST_COLOR, label: 'Вытяжка' },
+  return: { letter: 'Р', color: RETURN_COLOR, label: 'Рециркуляция' },
+}
+
+function systemChip(system: string) {
+  const meta = SYSTEM_META[system] ?? {
+    letter: system[0]?.toUpperCase() ?? '?',
+    color: '#9ca3af',
+    label: system,
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 font-medium text-[10px]"
+      key={system}
+      style={{ borderColor: `${meta.color}66`, color: meta.color }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: meta.color }} />
+      {meta.letter} · {meta.label}
+    </span>
+  )
+}
+
+/**
+ * Панель «Вентиляция» — список систем П/В, кнопка «Автообвод пересечений»,
+ * сводка потерь и замечания связности. Read-only поверх сцены; тумблер
+ * приходит из тулбара (как Riser Diagram). Автообвод применяет мутации
+ * одной командой (один undo-шаг).
+ */
+export function VentilationPanel() {
+  const isOpen = useEditor((s) => s.isVentilationOpen)
+  if (!isOpen) return null
+  return <VentilationContent />
+}
+
+function VentilationContent() {
+  const setVentilationOpen = useEditor((s) => s.setVentilationOpen)
+  const nodes = useScene((s) => s.nodes)
+  const [report, setReport] = useState<BypassApplyReport | null>(null)
+
+  const networks = useMemo(() => buildDuctNetworks(nodes), [nodes])
+  const markings = useMemo(() => planSystemMarkings(nodes), [nodes])
+  const bypass = useMemo(() => planAllBypasses(nodes), [nodes])
+  const findings = useMemo(() => validateDuctNetwork(nodes), [nodes])
+
+  const hasDucts = networks.length > 0
+  const hasCrossings = bypass.plans.length + bypass.skipped.length > 0
+  const totalLengthM = networks.reduce((sum, network) => sum + network.lengthM, 0)
+
+  const handleAutoBypass = () => {
+    const next = applyAllBypasses()
+    setReport(next)
+  }
+
+  return (
+    <div className="dark pointer-events-auto absolute top-4 right-4 z-30 flex max-h-[80vh] w-[24rem] flex-col overflow-hidden rounded-2xl border border-border/40 bg-background/95 text-foreground shadow-lg backdrop-blur-xl">
+      <div className="flex items-center justify-between border-border/40 border-b px-4 py-2.5">
+        <div className="flex flex-col">
+          <span className="flex items-center gap-1.5 font-medium text-sm">
+            <Wind className="h-4 w-4 text-sky-400" /> Вентиляция
+          </span>
+          <span className="text-muted-foreground text-xs">Системы П/В · ГОСТ 21.602</span>
+        </div>
+        <button
+          aria-label="Close ventilation panel"
+          className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-white/10"
+          onClick={() => setVentilationOpen(false)}
+          type="button"
+        >
+          <X className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 border-border/40 border-b px-4 py-2 text-xs">
+        {(['supply', 'exhaust', 'return'] as const).map((system) => (
+          <span className="flex items-center gap-1.5" key={system}>
+            <span className="h-0.5 w-4" style={{ background: SYSTEM_META[system]!.color }} />
+            {SYSTEM_META[system]!.letter}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {!hasDucts ? (
+          <div className="flex h-32 items-center justify-center px-6 text-center text-muted-foreground text-sm">
+            Воздуховоды ещё не нарисованы. Добавьте трассы П/В, чтобы увидеть системы и пересечения.
+          </div>
+        ) : (
+          <>
+            <div className="rounded-xl border border-border/45 bg-background/60 px-3 py-2 text-xs">
+              <span className="text-muted-foreground">Участков в сетях: </span>
+              <span className="font-mono font-medium text-foreground">{networks.length}</span>
+              <span className="ml-3 text-muted-foreground">Суммарная длина: </span>
+              <span className="font-mono font-medium text-foreground">
+                {totalLengthM.toFixed(1)} м
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {networks.map((network) => {
+                const mark = markings[network.nodeIds[0]!] ?? network.systems[0] ?? '?'
+                return (
+                  <div
+                    className="rounded-xl border border-border/45 bg-background/75 p-2.5"
+                    key={network.nodeIds[0]}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-white/10 px-2 py-0.5 font-mono font-semibold text-xs">
+                        {mark}
+                      </span>
+                      <div className="flex min-w-0 flex-wrap gap-1">
+                        {network.systems.map((system) => systemChip(system))}
+                      </div>
+                      <span
+                        className={cn(
+                          'ml-auto shrink-0 text-[10px]',
+                          network.connectedToEquipment ? 'text-emerald-400' : 'text-amber-400',
+                        )}
+                      >
+                        {network.connectedToEquipment ? 'С установкой' : 'Нет установки'}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground">
+                      <span>
+                        Длина{' '}
+                        <span className="font-mono text-foreground">
+                          {network.lengthM.toFixed(1)} м
+                        </span>
+                      </span>
+                      <span>
+                        Свободных концов{' '}
+                        <span
+                          className={cn(
+                            'font-mono',
+                            network.openEndCount > 0 ? 'text-amber-400' : 'text-foreground',
+                          )}
+                        >
+                          {network.openEndCount}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {findings.length > 0 && (
+              <div className="space-y-1.5">
+                {findings.map((finding, index) => (
+                  <div
+                    className={cn(
+                      'flex items-start gap-2 rounded-lg border px-2.5 py-2 text-xs',
+                      finding.severity === 'error'
+                        ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+                    )}
+                    key={`${finding.code}-${index}`}
+                  >
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{finding.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium text-xs">Автообвод пересечений П/В</p>
+                  <p className="text-muted-foreground text-[10px]">
+                    {hasCrossings
+                      ? `${bypass.plans.length} пересечений готово, ${bypass.skipped.length} пропущено`
+                      : 'Пересечений не найдено'}
+                  </p>
+                </div>
+                <button
+                  className="shrink-0 rounded-md border border-sky-400/40 bg-sky-500/20 px-2.5 py-1.5 font-medium text-xs text-sky-200 transition-colors hover:bg-sky-500/30 disabled:cursor-default disabled:opacity-40"
+                  disabled={bypass.plans.length === 0}
+                  onClick={handleAutoBypass}
+                  type="button"
+                >
+                  Обойти
+                </button>
+              </div>
+
+              {bypass.plans.map((plan) => (
+                <div
+                  className="mt-2 flex items-start gap-2 rounded-lg border border-border/40 bg-background/60 px-2 py-1.5 text-[10px]"
+                  key={`${plan.crossing.supplyNodeId}-${plan.crossing.exhaustNodeId}`}
+                >
+                  <span className="font-mono font-semibold" style={{ color: SUPPLY_COLOR }}>
+                    П
+                  </span>
+                  <span className="text-muted-foreground">∩</span>
+                  <span className="font-mono font-semibold" style={{ color: EXHAUST_COLOR }}>
+                    В
+                  </span>
+                  <span className="text-muted-foreground">
+                    — утка {plan.angleDeg}° · сдвиг {plan.offsetMm} мм ·{' '}
+                    {plan.bypassLengthM.toFixed(2)} м
+                  </span>
+                  {plan.autoSwitchedTo90 && (
+                    <span
+                      className="ml-auto rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-300"
+                      title="45° не поместился по длине прямой — выбран 90°"
+                    >
+                      45→90°
+                    </span>
+                  )}
+                </div>
+              ))}
+              {bypass.skipped.length > 0 && (
+                <div className="mt-2 text-[10px] text-muted-foreground">
+                  {bypass.skipped.length} пересечений:{' '}
+                  {bypass.skipped[0]?.reason === 'no-room'
+                    ? 'не хватает длины прямой'
+                    : 'нет геометрии'}
+                </div>
+              )}
+            </div>
+
+            {report && (
+              <div
+                className={cn(
+                  'rounded-xl border px-3 py-2 text-xs',
+                  report.applied > 0
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                    : 'border-border/45 bg-background/60 text-muted-foreground',
+                )}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Check className="h-3.5 w-3.5" />
+                  {report.applied > 0
+                    ? `Построено обводов: ${report.applied}`
+                    : 'Обводов не построено'}
+                </span>
+                {report.switchedTo90 > 0 && (
+                  <span className="mt-0.5 block">
+                    Подсказка: {report.switchedTo90} утка(и) автоматически переключены на 90° — 45°
+                    не помещается по длине прямой.
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

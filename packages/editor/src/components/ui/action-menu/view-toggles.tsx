@@ -9,7 +9,7 @@ import {
   useScene,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { Check, ChevronDown, Eye, EyeOff, Layers2, Plus, Trash2, Waypoints } from 'lucide-react'
+import { Check, ChevronDown, Eye, EyeOff, Layers2, Plus, Trash2, Waypoints, Wind } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { getLevelDisplayName } from '@pascal-app/core'
@@ -941,6 +941,29 @@ function RiserControl() {
   )
 }
 
+// ── Ventilation panel control ───────────────────────────────────────────────
+
+function VentilationControl() {
+  const isVentilationOpen = useEditor((state) => state.isVentilationOpen)
+  const toggleVentilationOpen = useEditor((state) => state.toggleVentilationOpen)
+
+  return (
+    <ActionButton
+      className={cn(
+        isVentilationOpen
+          ? 'bg-white/15'
+          : 'opacity-60 grayscale hover:bg-white/5 hover:opacity-100 hover:grayscale-0',
+      )}
+      label="Вентиляция — системы П/В и автообвод"
+      onClick={toggleVentilationOpen}
+      size="icon"
+      variant="ghost"
+    >
+      <Wind className="h-4 w-4" />
+    </ActionButton>
+  )
+}
+
 // ── Exports ─────────────────────────────────────────────────────────────────
 
 export function SecondaryToggles() {
@@ -958,6 +981,7 @@ export function ViewToggles() {
       <GuidesControl />
       <ReferenceFloorControl />
       <RiserControl />
+      <VentilationControl />
     </div>
   )
 }

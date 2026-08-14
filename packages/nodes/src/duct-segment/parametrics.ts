@@ -170,4 +170,5 @@ export const ductSegmentParametrics: ParametricDescriptor<DuctSegmentNode> = {
       ],
     },
   ],
+  trailingSection: () => import('./mep-panel'),
 }

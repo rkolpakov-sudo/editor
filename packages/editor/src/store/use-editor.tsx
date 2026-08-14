@@ -463,6 +463,10 @@ type EditorState = {
   isRiserOpen: boolean
   setRiserOpen: (open: boolean) => void
   toggleRiserOpen: () => void
+  // Toggleable MEP «Вентиляция» panel — systems П/В, автообвод, сводка потерь.
+  isVentilationOpen: boolean
+  setVentilationOpen: (open: boolean) => void
+  toggleVentilationOpen: () => void
   navigationSyncPose: NavigationSyncPose | null
   publishNavigationSyncPose: (pose: NavigationSyncPoseInput) => void
   floorplanSelectionTool: FloorplanSelectionTool
@@ -1302,6 +1306,10 @@ const useEditor = create<EditorState>()(
       isRiserOpen: false,
       setRiserOpen: (open) => set({ isRiserOpen: open }),
       toggleRiserOpen: () => set((state) => ({ isRiserOpen: !state.isRiserOpen })),
+      isVentilationOpen: false,
+      setVentilationOpen: (open) => set({ isVentilationOpen: open }),
+      toggleVentilationOpen: () =>
+        set((state) => ({ isVentilationOpen: !state.isVentilationOpen })),
       navigationSyncPose: null,
       publishNavigationSyncPose: (pose) => {
         const navigationSyncPose = {

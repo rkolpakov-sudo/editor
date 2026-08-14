@@ -444,6 +444,12 @@ export {
   metersToLinearUnit,
   squareMetersToAreaUnit,
 } from './lib/measurements'
+export {
+  applyAllBypasses,
+  applyGostSegmentation,
+  type BypassApplyReport,
+  type GostSplitOutcome,
+} from './lib/mep-actions'
 export { consumePlacementDragRelease } from './lib/placement-drag-release'
 export {
   addFreshPlacementMetadata,
