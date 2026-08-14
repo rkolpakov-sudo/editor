@@ -249,6 +249,7 @@ export {
   toSceneMaterialRef,
   unregisterLibraryMaterials,
 } from './material-library'
+export * from './mep'
 export type {
   FloorPlacedFootprint,
   FloorPlacedFootprintContext,

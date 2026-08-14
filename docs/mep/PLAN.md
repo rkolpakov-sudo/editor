@@ -25,7 +25,7 @@
 | Движок помещений | `packages/core/src/lib/space-detection.ts` | detectSpacesForLevel:2081, planAutoZonesForLevel:1688 (create/update/delete), resolveAutoZonePolygon, syncAutoSlabsForLevel, syncAutoZonesForLevel, live-синк :2204/:2353 |
 | Зоны | `packages/core/src/schema/nodes/zone.ts` | autoFromWalls, boundaryWallIds, enclosureStatus, spaceRole, roomNumber, occupancy, ceilingHeight; **spaceCategory** (по СП, default `public`) |
 | Видимость зон | `packages/editor/src/components/systems/zone/zone-system.tsx`, `viewer-zone-system.tsx` | room-зоны видны в любом structureLayer; generic-зоны — только в режиме zones |
-| Расчётный движок вентиляции | — | **ОТСУТСТВУЕТ** |
+| Расчётный движок вентиляции | `packages/core/src/mep/*` | ✅ **Этап 3 выполнен** (см. ниже): constants, norms-types, aerodynamics, sizing, routing-rules, duct-network |
 | Undo/Redo | `packages/editor/src/lib/history.ts` | runUndo/runRedo, useEditor; Ctrl+Z/Ctrl+Shift+Z; кнопки в тулбаре |
 | Экспорт/IFC/MCP | `apps/ifc-converter`, `packages/mcp/src/tools/*` | базовые тулзы |
 | Архитектура | `wiki/architecture/README.md` (21 страница) | слои: core (без Three), viewer (канвас), editor (UX); registry-driven (def.geometry/renderer/system) |
@@ -103,15 +103,15 @@ UI — в `packages/editor` / `apps/editor`.
   `SPACE_CATEGORIES` + поле `spaceCategory` (default `'public'`) + экспорт типа из `schema/index.ts`;
   значения соответствуют таблице `docs/mep/01-air-exchange-residential.md`.
 
-### Этап 3 — Модель данных расчёта (`packages/core`, чистая логика)
+### Этап 3 — Модель данных расчёта (`packages/core`, чистая логика) (выполнен)
 Новый модуль `packages/core/src/mep/`:
-- `constants.ts` — скорости прил. Л, воздухообмен, ряды размеров ГОСТ, длины сегментов, зазор 50 мм, шаги креплений.
-- `norms-types.ts` — SpaceCategory, SystemType (supply/exhaust/return), SheetType.
-- `aerodynamics.ts` — v=Q/(3600F), d=√(4F/π), d_экв, ξ отводов (по углу/R), ΔP = Σ(R·l + Z), Z=ξ·(ρv²/2).
-- `sizing.ts` — автоподбор диаметра/прямоугольника на **каждом участке** по СП 60 прил. Л.
-- `routing-rules.ts` — правила прокладки: крепления, отступы, проходы (гильзы), клапаны.
-- `bypass.ts` — сервис автообвода (см. Этап 4).
-- `system-graph.ts` — расширить: узлы segment/fitting/terminal, маршрутизация П/В, валидация.
+- `constants.ts` — скорости прил. Л (таблицы Л.1/Л.2 как `recommendedVelocityRange`, рабочий дефолт Л.3 с `TABLE_L3_VERIFIED = false`), воздухообмен по типам помещений (`AIR_EXCHANGE_RATES` + `resolveRequiredAirflowM3h`), ряды размеров ГОСТ (`ROUND_DUCT_SIZES_MM`, `RECT_SIDE_ROW_MM`), длины сегментов, зазор 50 мм (`BYPASS_MIN_GAP_MM`), шаги креплений, физ. константы воздуха. ✅
+- `norms-types.ts` — `SpaceCategory` (re-export из zone.ts), `SystemType` (supply/exhaust/return), `SheetType`, `AnnualHoursBand`, `BuildingClass`, `ResidentialSection`, `DuctShape`. ✅
+- `aerodynamics.ts` — v=Q/(3600F), d=√(4F/π), d_экв (по площади и по сопротивлению, d_h=4A/P для всех форм), ξ отводов (таблица по углу/R с интерполяцией), ΔP = Σ(R·l + Z), Z=ξ·(ρv²/2), λ (ламинарный/Блазиус), N=Q·ΔP/(3600·η). ✅
+- `sizing.ts` — автоподбор диаметра/прямоугольника на **каждом участке** по СП 60 прил. Л с привязкой к ГОСТ-ряду (smallest in-band, переподбор при нехватке). ✅
+- `routing-rules.ts` — правила прокладки: крепления (`mountingSpacingM`/`supportCountForRun`), проходы через стены (`checkWallPenetration` — гильза + негорючее уплотнение), противопожарные клапаны (`checkFireBarrierCrossing`), планарные примитивы пересечений. ✅
+- `duct-network.ts` — расширение system-graph: группировка компонентов в сети П/В/return, маршрутизация, валидация (`open-run-end`, `unconnected-terminal`, `orphaned-network`, `mixed-systems`). Выделен в `mep/` (переиспользует `buildPortComponents`/`summarizeSystemFor`), чтобы не менять существующий `services/system-graph.ts`. ✅
+- `bypass.ts` — сервис автообвода, **см. Этап 4** (в Этапе 3 заложены примитивы пересечений в `routing-rules.ts` и константа зазора).
 
 ### Этап 4 — Обвод пересечений П/В (утка) — автоопределение + автопостроение
 Сервис `packages/core/src/mep/bypass.ts` (чистая логика, без Three):
