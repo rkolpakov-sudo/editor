@@ -1,7 +1,7 @@
 # ПЛАН: Профессиональный инструмент прокладки воздуховодов по нормам РФ
 
 Дата: 14.08.2026. Статус: утверждён пользователем, реализация строго по этапам 0→7 (каждый этап завершается тестами).
-**Этапы 0–6 выполнены; в работе — Этап 7 (тесты).** Целевой репозиторий: `pascalorg/editor` (монорепо Turborepo + Bun). Ветка разработки: `main`.
+**Все этапы 0–7 выполнены.** Целевой репозиторий: `pascalorg/editor` (монорепо Turborepo + Bun). Ветка разработки: `main`.
 
 ## 1. Контекст и цель
 
@@ -165,16 +165,27 @@ UI — в `packages/editor` / `apps/editor`.
 - IFC: `apps/ifc-converter` — импорт IFC→Pascal (однонаправленный), экспорт Pascal→IFC в репозитории отсутствует;
   поля систем и результаты расчёта несут узлы duct (`system`) и MCP-тулзы экспорта. ✅ (документировано)
 
-### Этап 7 — Тесты
-- Unit: аэродинамика/подбор (по таблицам Л.1/Л.2), bypass (пересечение, угол, зазор 50, приоритет П/В), миграция дюймы→мм, авто-зоны (размыкание→удаление), спецификация.
-- Integration: «план → зоны → трассы П/В → пересечение → автообвод → расчёт → спецификация».
-- Проверки: `bun check` (Biome), `bun run check-types`, `bun test`.
+### Этап 7 — Тесты (выполнен)
+- Unit: аэродинамика/подбор (по таблицам Л.1/Л.2), bypass (пересечение, угол, зазор 50, приоритет П/В), миграция дюймы→мм, авто-зоны (размыкание→удаление), спецификация. ✅
+  - `mep/aerodynamics.test.ts` (16), `sizing.test.ts` (9), `constants.test.ts` (11) — Л.1/Л.2, подбор по ГОСТ-ряду;
+  - `mep/bypass.test.ts` (15) — пересечение, 45°/90°, зазор ≥50 мм, приоритет П/В, split, аэродинамика;
+  - `utils/duct-units-migration.test.ts` (6) — миграция дюймы→мм, идемпотентность;
+  - `lib/space-detection.test.ts` — авто-зоны: create/update/delete, **размыкание контура → удаление**;
+  - `mep/specification.test.ts` (11), `gost-segmentation.test.ts` (13), `routing-rules.test.ts` (10), `duct-network.test.ts` (9), `dxf.test.ts` (8).
+- Integration: «план → зоны → трассы П/В → пересечение → автообвод → расчёт → спецификация». ✅
+  `mep/pipeline.test.ts` (7) — полный пайплайн одной сценой: замкнутый контур стен → авто-зона
+  (`detectSpacesForLevel`/`planAutoZonesForLevel`), категория по СП 54 → норматив (кухня 90 м³/ч),
+  П/В трассы → `detectBypassCrossings`, утка (`planAllBypasses`+`buildBypassMutations`, смещение
+  supply + 2×50 мм, повторный проход 0 конфликтов), `sizeDuctSection` по Л.1, спецификация
+  (`buildDuctSpecification` — системы П1/В1, утка в фасонных частях, 4 гильзы, крепления, масса).
+- Проверки: `bun check` (Biome) — чисто; `bun run check-types` — 10/10; `bun test` — 3182 pass / 1 skip / 0 fail.
 
 ## 7. Файлы, которые будут затронуты
 
 - `packages/core/src/schema/nodes/{duct-segment,duct-fitting,zone}.ts`
 - `packages/core/src/utils/duct-units-migration.ts` (миграция дюймы→мм; сделано)
 - `packages/core/src/mep/*` (новые: constants, norms-types, aerodynamics, sizing, routing-rules, bypass)
+- `packages/core/src/mep/pipeline.test.ts` (интеграционный тест Этапа 7)
 - `packages/core/src/services/system-graph.ts`, `packages/core/src/lib/space-detection.ts`
 - `packages/nodes/src/duct-fitting/{schema,ports,parametrics,geometry,floorplan,definition}.ts`
 - `packages/nodes/src/duct-segment/*`
@@ -184,7 +195,7 @@ UI — в `packages/editor` / `apps/editor`.
 
 ## 8. Проверки на каждом этапе
 
-- `bun check` — Biome lint/format.
-- `bun run check-types` — typecheck.
-- `bun test` — unit/integration.
-- Перед переходом к следующему этапу — все тесты зелёные.
+- `bun check` — Biome lint/format. ✅ (чисто на всех этапах)
+- `bun run check-types` — typecheck. ✅
+- `bun test` — unit/integration. ✅ (итог Этапа 7: 3182 pass / 1 skip / 0 fail)
+- Перед переходом к следующему этапу — все тесты зелёные. ✅
