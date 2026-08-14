@@ -244,9 +244,7 @@ function inheritProfile(port: ScenePort): DraftProfile | null {
   if (owner.type === 'duct-segment' || owner.type === 'duct-fitting') {
     return {
       shape: owner.shape,
-      diameter: clampDuctMm(
-        owner.type === 'duct-segment' ? owner.diameter : owner.diameter,
-      ),
+      diameter: clampDuctMm(owner.type === 'duct-segment' ? owner.diameter : owner.diameter),
       width: owner.width,
       height: owner.height,
     }
@@ -1214,7 +1212,7 @@ function PreviewSegment({
     )
   }
 
-  const radius = (profile.diameter / 1000) / 2
+  const radius = profile.diameter / 1000 / 2
   return (
     <mesh
       layers={EDITOR_LAYER}

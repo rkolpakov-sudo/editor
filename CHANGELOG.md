@@ -10,6 +10,7 @@
 
 ### Fixes
 
+- Normalize repository line endings to LF via `.gitattributes` (`* text=auto eol=lf`), so `bun check` (Biome, which validates LF) passes on Windows checkouts instead of flagging every file as CRLF-reformatted. Also fixed the six latent formatting violations from MEP stage 1 that the CRLF wall had masked (missing trailing newline in `duct-units-migration.ts`, collapsed signatures in `duct-segment/tool.tsx`, import ordering in `use-scene.ts`/`scene-migrations.ts`/`duct-fitting/parametrics.ts`, indentation in `auto-fitting.test.ts`).
 - CLI managed runtime now verifies recorded editor/MCP process identity on Windows (via `Get-CimInstance Win32_Process`) instead of always refusing force-stop. Previously `stopEditor({force: true})` threw `state_conflict` on win32, leaving detached editor and MCP subprocesses running — which hung `bun test` until they were killed.
 - Preserve custom scene materials across save, load, clone, fork, and live sync. Materials were dropped at every persistence boundary, so a scene reopened with default surfaces. Collections were dropped on MCP import for the same reason ([#597](https://github.com/pascalorg/editor/pull/597)) by [@ShiroKSH](https://github.com/ShiroKSH)
 - Wall junction mitering is now deterministic for exactly-collinear walls, so identical scenes produce identical geometry regardless of node iteration order ([#596](https://github.com/pascalorg/editor/pull/596)) by [@tomatotomata](https://github.com/tomatotomata)

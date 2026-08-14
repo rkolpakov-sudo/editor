@@ -32,10 +32,10 @@ import {
   type SceneMaterialId,
 } from '../schema/scene-material'
 import { type AnyNode, type AnyNodeId, AnyNode as AnyNodeSchema } from '../schema/types'
+import { migrateDuctUnitsToMm } from '../utils/duct-units-migration'
 import { healSceneNodes } from '../utils/heal-scene-graph'
 import { removeRetiredDrawingSheetNodes } from '../utils/retired-scene-nodes'
 import { migrateVerticalSceneNodes } from '../utils/vertical-scene-migration'
-import { migrateDuctUnitsToMm } from '../utils/duct-units-migration'
 import * as nodeActions from './actions/node-actions'
 import {
   areSceneSnapshotsEqual,

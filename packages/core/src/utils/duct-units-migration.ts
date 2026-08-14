@@ -52,9 +52,7 @@ function inchesToMm(value: number): number {
  * be unsafe — a migrated 2" round duct becomes 50.8mm, still < 100 — so the
  * marker is required.
  */
-export function migrateDuctUnitsToMm(
-  sourceNodes: Record<string, unknown>,
-): DuctUnitsMigration {
+export function migrateDuctUnitsToMm(sourceNodes: Record<string, unknown>): DuctUnitsMigration {
   const nodes: Record<string, any> = { ...sourceNodes }
   let changed = false
 

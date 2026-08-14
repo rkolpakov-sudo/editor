@@ -1,0 +1,4 @@
+# Normalize all text files to LF in the repository and on every checkout.
+# Biome's format check validates LF line endings, so Windows developers must
+# get LF on disk (this overrides the machine's core.autocrlf=true).
+* text=auto eol=lf

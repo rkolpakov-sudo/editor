@@ -7,6 +7,11 @@ import {
 } from '@pascal-app/core'
 import { Vector3 } from 'three'
 import {
+  ductPortDiameterMm,
+  equivalentDiameterMm,
+  ovalEquivalentDiameterMm,
+} from '../duct-segment/geometry'
+import {
   autoOffsetInvalidationUpdates,
   readAutoOffsetTag,
   withAutoOffsetTag,
@@ -14,11 +19,6 @@ import {
 import { DuctFittingSizeSwapEditor } from './inspector-editors'
 import { getDuctFittingPorts } from './ports'
 import type { DuctFittingNode } from './schema'
-import {
-  ductPortDiameterMm,
-  equivalentDiameterMm,
-  ovalEquivalentDiameterMm,
-} from '../duct-segment/geometry'
 
 /** Schema bounds for `diameter` / `diameter2`. */
 const clampDiameter = (d: number) => Math.min(2000, Math.max(100, d))
