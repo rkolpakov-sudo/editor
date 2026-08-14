@@ -1,10 +1,22 @@
 import { describe, expect, test } from 'bun:test'
 import { detectSpacesForLevel, planAutoZonesForLevel } from '../lib/space-detection'
 import type { AnyNode, AnyNodeId } from '../schema'
-import { type DuctFittingNode, DuctSegmentNode, WallNode, ZoneNode } from '../schema'
+import {
+  type DuctFittingNode,
+  DuctSegmentNode,
+  DuctTerminalNode,
+  HvacEquipmentNode,
+  WallNode,
+  ZoneNode,
+} from '../schema'
 import { ductSectionAreaM2, pressureDropPa, velocityMps } from './aerodynamics'
+import { assignZoneAirflowsToTerminals, computeZoneAirflows, terminalFlowMap } from './air-exchange'
 import { buildBypassMutations, detectBypassCrossings, planAllBypasses } from './bypass'
 import { resolveRequiredAirflowM3h } from './constants'
+import { registerDuctNetworkStubs } from './duct-network-stubs'
+import { computeNetworkFlows } from './network-flows'
+import { computeNetworkPressure } from './network-pressure'
+import { sizeDuctNetworks, sizedProfiles } from './network-sizing'
 import { sizeDuctSection } from './sizing'
 import { buildDuctSpecification } from './specification'
 
@@ -283,5 +295,76 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     expect(spec.sections.fittings.some((row) => row.name.includes('Утка'))).toBe(true)
     expect(spec.totals.sleeves).toBeGreaterThanOrEqual(4)
     expect(spec.totals.massKg).toBeGreaterThan(0)
+  })
+
+  test('Этап 8: кухня 90 → расход на участках → подбор Ø100 → ΔP сети', () => {
+    registerDuctNetworkStubs()
+
+    // 1) План и авто-зона кухни (СП 54 → 90 м³/ч вытяжки).
+    const walls = roomWalls()
+    const { spaces } = detectSpacesForLevel('level-1', walls)
+    const zonePlan = planAutoZonesForLevel(spaces, [])
+    const zone = ZoneNode.parse({ ...zonePlan.create[0]!, spaceCategory: 'kitchen_gas' })
+    const [airflow] = computeZoneAirflows([zone])
+    expect(airflow!.requiredFlowM3h).toBe(90)
+    expect(airflow!.direction).toBe('exhaust')
+
+    // 2) Вытяжная сеть: установка → магистраль (два участка) → вытяжная решётка.
+    const equipment = HvacEquipmentNode.parse({
+      id: 'hvac-equipment_fan',
+      position: [0, 2.6, 0],
+      equipmentType: 'furnace',
+    } as AnyNode)
+    const seg1 = segment(
+      [
+        [0, 2.6, 0],
+        [4, 2.6, 0],
+      ],
+      { id: 'duct-segment_exh1', system: 'exhaust', diameter: 160 },
+    )
+    const seg2 = segment(
+      [
+        [4, 2.6, 0],
+        [7, 2.6, 0],
+      ],
+      { id: 'duct-segment_exh2', system: 'exhaust', diameter: 160 },
+    )
+    const grille = DuctTerminalNode.parse({
+      id: 'duct-terminal_grille',
+      position: [7, 2.6, 0],
+      terminalType: 'return-grille',
+    } as AnyNode)
+    const scene = sceneOf(zone, equipment, seg1, seg2, grille)
+
+    // 3) Зона → терминал → расходы по сети.
+    const assignments = assignZoneAirflowsToTerminals(scene, [zone])
+    expect(assignments).toHaveLength(1)
+    expect(assignments[0]!.terminalId).toBe(grille.id)
+    const flows = computeNetworkFlows(scene, { terminalFlows: terminalFlowMap(assignments) })
+    expect(flows).toHaveLength(1)
+    const network = flows[0]!
+    expect(network.connectedToEquipment).toBe(true)
+    expect(network.totalFlowM3h).toBe(90)
+    expect(network.segmentFlows[seg1.id]).toBeCloseTo(90, 9)
+    expect(network.segmentFlows[seg2.id]).toBeCloseTo(90, 9)
+
+    // 4) Сетевой подбор: каждый участок по своему расходу → Ø100, v в Л.1.
+    const sizing = sizeDuctNetworks(scene, { flows })
+    expect(sizing).toHaveLength(1)
+    const sized1 = sizing[0]!.segments.find((row) => row.segmentId === seg1.id)!
+    const sized2 = sizing[0]!.segments.find((row) => row.segmentId === seg2.id)!
+    expect(sized1.profile).toEqual({ shape: 'round', diameterMm: 100 })
+    expect(sized2.profile).toEqual({ shape: 'round', diameterMm: 100 })
+    expect(sized1.inNormBand).toBe(true)
+
+    // 5) Потери по сети (по подобранным сечениям): критический путь > 0.
+    const pressure = computeNetworkPressure(scene, {
+      flows,
+      profiles: sizedProfiles(sizing),
+    })
+    expect(pressure).toHaveLength(1)
+    expect(pressure[0]!.paths).toHaveLength(1)
+    expect(pressure[0]!.criticalPath).not.toBeNull()
+    expect(pressure[0]!.totalPressurePa).toBeGreaterThan(0)
   })
 })

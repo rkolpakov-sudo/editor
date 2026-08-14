@@ -1,16 +1,24 @@
 'use client'
 
+import type { AnyNode, AnyNodeId, DuctNetwork, ZoneNode } from '@pascal-app/core'
 import {
+  assignZoneAirflowsToTerminals,
   buildDuctNetworks,
   buildDuctSpecification,
+  computeNetworkFlows,
+  computeNetworkPressure,
+  computeZoneAirflows,
   ductsToDxf,
   planAllBypasses,
   planSystemMarkings,
+  sizeDuctNetworks,
+  sizedProfiles,
   specificationToCsv,
+  terminalFlowMap,
   useScene,
   validateDuctNetwork,
 } from '@pascal-app/core'
-import { AlertTriangle, Check, ClipboardList, Download, Wind, X } from 'lucide-react'
+import { AlertTriangle, Calculator, Check, ClipboardList, Download, Wind, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { applyAllBypasses, type BypassApplyReport } from '../../lib/mep-actions'
 import { cn } from '../../lib/utils'
@@ -50,6 +58,223 @@ function systemChip(system: string) {
  * приходит из тулбара (как Riser Diagram). Автообвод применяет мутации
  * одной командой (один undo-шаг).
  */
+function shortNodeId(id: string): string {
+  return id.replace(/^duct-segment_/, '')
+}
+
+function profileLabel(profile: {
+  shape: string
+  diameterMm?: number
+  widthMm?: number
+  heightMm?: number
+}): string {
+  return profile.shape === 'round'
+    ? `Ø${profile.diameterMm}`
+    : `${profile.widthMm}×${profile.heightMm}`
+}
+
+/**
+ * Этап 8 — секция «Расчёт сети»: воздухообмен зон → расходы на участках →
+ * подбор сечений по СП 60 → потери по путям с критическим путём и
+ * балансировкой ответвлений. Таблица «участок → Q, сечение, v, ΔP» с
+ * подсветкой участков вне норм-диапазона и шумовой проверки.
+ */
+function NetworkCalcSection({
+  nodes,
+  markings,
+  networks,
+}: {
+  nodes: Record<AnyNodeId, AnyNode>
+  markings: Record<AnyNodeId, string>
+  networks: DuctNetwork[]
+}) {
+  const [open, setOpen] = useState(false)
+
+  const calc = useMemo(() => {
+    const zones = Object.values(nodes).filter(
+      (node): node is ZoneNode => node?.type === 'zone' && node.spaceRole === 'room',
+    )
+    const airflows = computeZoneAirflows(zones)
+    const assignments = assignZoneAirflowsToTerminals(nodes, zones)
+    const terminalFlows = terminalFlowMap(assignments)
+    const flows = computeNetworkFlows(nodes, { terminalFlows })
+    const sizing = sizeDuctNetworks(nodes, { flows })
+    const pressure = computeNetworkPressure(nodes, { flows, profiles: sizedProfiles(sizing) })
+    const unassigned = airflows.filter(
+      (airflow) =>
+        airflow.requiredFlowM3h !== null &&
+        airflow.requiredFlowM3h > 0 &&
+        !assignments.some((assignment) => assignment.zoneId === airflow.zoneId),
+    )
+    return { zones, airflows, assignments, flows, sizing, pressure, unassigned }
+  }, [nodes])
+
+  const hasRooms = calc.zones.length > 0
+
+  return (
+    <div className="rounded-xl border border-border/45 bg-background/75">
+      <div className="flex items-center gap-2 px-2.5 py-2">
+        <Calculator className="h-3.5 w-3.5 text-muted-foreground" />
+        <button
+          className="flex-1 text-left font-medium text-xs"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          Расчёт сети
+        </button>
+        {!hasRooms && <span className="text-[10px] text-muted-foreground">нет зон-помещений</span>}
+      </div>
+
+      {open && (
+        <div className="space-y-2 border-t border-border/40 p-2.5">
+          {!hasRooms ? (
+            <p className="text-[10px] leading-relaxed text-muted-foreground">
+              Добавьте зоны помещений с категорией по СП (инспектор зоны → «Вентиляция»), чтобы
+              рассчитать воздухообмен, расходы на участках и сетевые потери.
+            </p>
+          ) : (
+            <>
+              {calc.unassigned.length > 0 && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200">
+                  {calc.unassigned.length} помещение(й) без подходящего терминала (притока/вытяжки)
+                  — их расход не учтён в сети.
+                </p>
+              )}
+
+              {calc.pressure.map((pressureResult, index) => {
+                const network = networks[index]
+                const mark = network
+                  ? (markings[network.nodeIds[0]!] ?? pressureResult.systems[0] ?? '?')
+                  : '?'
+                const flowResult = calc.flows[index]
+                const unbalanced = pressureResult.balances.filter(
+                  (balance) => !balance.withinTolerance,
+                ).length
+                return (
+                  <div
+                    className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-1.5 text-[10px]"
+                    key={index}
+                  >
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono font-semibold">
+                        {mark}
+                      </span>
+                      <span className="text-muted-foreground">
+                        ΣQ{' '}
+                        <span className="font-mono text-foreground">
+                          {(flowResult?.totalFlowM3h ?? 0).toFixed(0)} м³/ч
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground">
+                        Крит. путь{' '}
+                        <span className="font-mono text-foreground">
+                          {pressureResult.totalPressurePa.toFixed(1)} Па
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground">
+                        Путей{' '}
+                        <span className="font-mono text-foreground">
+                          {pressureResult.paths.length}
+                        </span>
+                      </span>
+                      {unbalanced > 0 && (
+                        <span className="ml-auto rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-amber-300">
+                          {unbalanced} разбалансировк.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              <table className="w-full text-left text-[10px]">
+                <thead className="text-muted-foreground">
+                  <tr className="border-b border-border/40">
+                    <th className="px-1.5 py-1 font-medium">Участок</th>
+                    <th className="px-1.5 py-1 font-medium">С</th>
+                    <th className="px-1.5 py-1 text-right font-medium">Q, м³/ч</th>
+                    <th className="px-1.5 py-1 font-medium">Сечение</th>
+                    <th className="px-1.5 py-1 text-right font-medium">v, м/с</th>
+                    <th className="px-1.5 py-1 text-right font-medium">ΔP, Па</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.sizing
+                    .flatMap((result) => result.segments)
+                    .map((segment) => {
+                      const warn = !segment.inNormBand || segment.noiseCheckRequired
+                      return (
+                        <tr
+                          className={`border-b border-border/25 ${warn ? 'bg-amber-500/5' : ''}`}
+                          key={segment.segmentId}
+                        >
+                          <td className="px-1.5 py-1 font-mono" title={segment.segmentId}>
+                            {shortNodeId(segment.segmentId)}
+                          </td>
+                          <td className="px-1.5 py-1">
+                            <span
+                              className="font-mono font-semibold"
+                              style={{ color: SYSTEM_META[segment.system]?.color }}
+                            >
+                              {SYSTEM_META[segment.system]!.letter}
+                            </span>
+                          </td>
+                          <td className="px-1.5 py-1 text-right font-mono">
+                            {segment.flowM3h.toFixed(0)}
+                          </td>
+                          <td className="px-1.5 py-1 font-mono">{profileLabel(segment.profile)}</td>
+                          <td className="px-1.5 py-1 text-right font-mono">
+                            {segment.velocityMps.toFixed(1)}
+                          </td>
+                          <td className="px-1.5 py-1 text-right font-mono">
+                            {segment.frictionDropPa.toFixed(1)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+
+              {(calc.sizing.some((result) => result.warnings.length > 0) ||
+                calc.pressure.some((result) => result.warnings.length > 0)) && (
+                <div className="space-y-1">
+                  {calc.sizing.flatMap((result, index) =>
+                    result.warnings.map((warning, warningIndex) => (
+                      <p
+                        className="flex items-start gap-1.5 text-[10px] text-amber-200"
+                        key={`s${index}-${warningIndex}`}
+                      >
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        {warning}
+                      </p>
+                    )),
+                  )}
+                  {calc.pressure.flatMap((result, index) =>
+                    result.warnings.map((warning, warningIndex) => (
+                      <p
+                        className="flex items-start gap-1.5 text-[10px] text-amber-200"
+                        key={`p${index}-${warningIndex}`}
+                      >
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        {warning}
+                      </p>
+                    )),
+                  )}
+                </div>
+              )}
+
+              <p className="text-[9px] text-muted-foreground">
+                Подсветка — скорость вне норм-диапазона СП 60 прил. Л или шумовая проверка (&gt;5
+                м/с). Порог балансировки ответвлений 15% — рабочее значение до верификации по СП 60.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function VentilationPanel() {
   const isOpen = useEditor((s) => s.isVentilationOpen)
   if (!isOpen) return null
@@ -295,6 +520,8 @@ function VentilationContent() {
                 )}
               </div>
             )}
+
+            <NetworkCalcSection markings={markings} networks={networks} nodes={nodes} />
 
             <div className="rounded-xl border border-border/45 bg-background/75">
               <div className="flex items-center gap-2 px-2.5 py-2">

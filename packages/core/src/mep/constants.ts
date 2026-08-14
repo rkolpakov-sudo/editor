@@ -21,6 +21,13 @@ import type {
 export const TABLE_L3_VERIFIED = false
 /** Mounting spacings are typical values pending the full СП 73 text. */
 export const MOUNTING_SPACING_VERIFIED = false
+/** Fitting local-resistance coefficients (tee/transition ξ) are working
+ *  values from reference literature, pending a normative source. */
+export const FITTING_ZETA_VERIFIED = false
+
+/** Max imbalance between branch pressure drops at a junction before the
+ *  network reports an unbalance (working threshold pending СП 60 review). */
+export const BRANCH_BALANCE_TOLERANCE_PCT = 15
 
 // ── Air physics ───────────────────────────────────────────────────────────
 /** Air density at ~20 °C, kg/m³. */

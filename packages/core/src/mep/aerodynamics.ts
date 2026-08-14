@@ -165,6 +165,29 @@ export function localPressureDropPa(
   return zeta * ((airDensityKgM3 * velocityMps * velocityMps) / 2)
 }
 
+// ── Other fitting ξ (tee / transition) ────────────────────────────────────
+// Working values from duct-network reference literature — the full СП 60
+// appendix text is paid and the coefficients are flagged `_VERIFIED = false`
+// (see `docs/mep/05-sources-log.md`, stage 11 verifies them).
+
+/** Local resistance coefficient ξ of a tee junction: the air either passes
+ *  straight through the run (`viaBranch = false`, low ξ) or turns into the
+ *  side tap (`viaBranch = true`, higher ξ). Working values pending a
+ *  normative source — see `FITTING_ZETA_VERIFIED`. */
+export function teeZeta(viaBranch: boolean): number {
+  return viaBranch ? 0.6 : 0.1
+}
+
+/** Local resistance coefficient ξ of a reducer / square-to-round transition
+ *  by the two section areas (m²). An abrupt change loses more as the area
+ *  ratio diverges from 1 (straight-through); working value pending
+ *  verification — see `FITTING_ZETA_VERIFIED`. */
+export function transitionZeta(largerAreaM2: number, smallerAreaM2: number): number {
+  if (largerAreaM2 <= 0) return 0
+  const ratio = clamp(smallerAreaM2 / largerAreaM2, 0.1, 1)
+  return 0.4 * (1 - ratio) * (1 - ratio)
+}
+
 // ── Friction (R·l) ────────────────────────────────────────────────────────
 
 /** Reynolds number for a round/hydraulic diameter, m²/s viscosity. */

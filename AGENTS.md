@@ -64,17 +64,19 @@ Invoke the `review-architecture` skill (`.agents/skills/review-architecture/SKIL
 - Авто-зоны помещений — автоматически из замкнутых контуров стен, удаляются при размыкании, видны по умолчанию.
 - Расчётный движок и правила — в `packages/core` (чистая логика, без Three.js); UI — в `packages/editor`/`apps/editor`.
 
-Статус: **Этапы 0–6 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
+Статус: **Этапы 0–8 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
 коммиты `19224724`, `7f1aede5`, `31a7060f`; авто-зоны помещений: create/update/delete из замкнутых контуров,
 room-зоны видны без слоя zones, `zone.ts` получил `spaceCategory`; расчётный движок `packages/core/src/mep/`:
-constants, norms-types, aerodynamics, sizing, routing-rules, duct-network, bypass — 70 тестов; schema:
-`system: 'supply'|'exhaust'|'return'`, `fittingType:'offset'` (утка) + `offset`/`offsetRadiusFactor`; сервис
-автообвода `packages/core/src/mep/bypass.ts`: детекция П/В, геометрия S 45/90 (R=1.5D), зазор ≥50 мм,
-split сегмента + фиттинг утка, пересчёт ΔP/Σξ/подбор по ГОСТ; фиттинг утка рендерится в nodes; UI:
-панель «Вентиляция», маркировка П1/В1, инспекторы, «Автообвод»; экспорт: спецификация
-`packages/core/src/mep/specification.ts` (ведомость по ГОСТ, CSV), план DXF `packages/core/src/mep/dxf.ts`
-(слои П/В/Р, маркировка), MCP `mep_specification`/`mep_dxf`, `describe_node` для duct).
-Следующий — Этап 7 (unit/integration-тесты: план → зоны → трассы П/В → пересечение → автообвод → расчёт → спецификация).
+constants, norms-types, aerodynamics, sizing, routing-rules, duct-network, bypass, specification, dxf —
+Этапы 0–7; **Этап 8 — сетевой расчёт**: `air-exchange.ts` (воздухообмен зон по СП 54 → ближайшие терминалы),
+`network-flows.ts` (граф сетей по портам + пропагация расходов к магистрали),
+`network-pressure.ts` (пути оборудования→терминалы, ΣΔP = R·l + ξ фитингов, критический путь,
+балансировка ответвлений ≤15%, `FITTING_ZETA_VERIFIED=false`), `network-sizing.ts` (подбор сечений
+магистраль→ответвления, `sizedProfiles`); UI: секция «Расчёт сети» в панели «Вентиляция»
+(сводка ΣQ/крит. путь, таблица участок→Q/Ø/v/ΔP, подсветка шума/вне диапазона); тесты: +24 unit +
+интеграция в `pipeline.test.ts` (кухня 90 → расход → Ø100 → ΔP), всего 3207 pass / 1 skip / 0 fail).
+Следующий — Этап 9 (утка v2: обвод по сетям, несколько пересечений одной вытяжки, вертикальный зазор,
+автовыбор стороны, единый источник ξ отводов).
 Архитектурно-чувствительные
 изменения (новая схема/система/инструмент) — сначала читать `wiki/architecture/` по правилам ниже.
 

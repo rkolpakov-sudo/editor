@@ -19,11 +19,11 @@ import {
  */
 
 /** Same joint tolerance as `system-graph`'s port coincidence. */
-const JOINT_EPS_M = 0.05
+export const JOINT_EPS_M = 0.05
 
-type MepNodeRole = 'equipment' | 'segment' | 'fitting' | 'terminal'
+export type MepNodeRole = 'equipment' | 'segment' | 'fitting' | 'terminal'
 
-function mepRoleOf(node: AnyNode): MepNodeRole | null {
+export function mepRoleOf(node: AnyNode): MepNodeRole | null {
   switch (node.type) {
     case 'duct-segment':
       return 'segment'
@@ -38,7 +38,7 @@ function mepRoleOf(node: AnyNode): MepNodeRole | null {
   }
 }
 
-type PortRecord = {
+export type PortRecord = {
   nodeId: AnyNodeId
   portId: string
   nodeType: AnyNode['type']
@@ -47,7 +47,7 @@ type PortRecord = {
   z: number
 }
 
-function collectPortRecords(nodes: Readonly<Record<AnyNodeId, AnyNode>>): PortRecord[] {
+export function collectPortRecords(nodes: Readonly<Record<AnyNodeId, AnyNode>>): PortRecord[] {
   const records: PortRecord[] = []
   for (const node of Object.values(nodes)) {
     if (!node) continue
@@ -68,7 +68,7 @@ function collectPortRecords(nodes: Readonly<Record<AnyNodeId, AnyNode>>): PortRe
 }
 
 /** recordIndex → indices of coincident ports on OTHER nodes. */
-function matedPortGroups(records: readonly PortRecord[]): Map<number, number[]> {
+export function matedPortGroups(records: readonly PortRecord[]): Map<number, number[]> {
   const groups = new Map<number, number[]>()
   const epsSq = JOINT_EPS_M * JOINT_EPS_M
   for (let i = 0; i < records.length; i += 1) {

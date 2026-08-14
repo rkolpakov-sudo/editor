@@ -1,8 +1,8 @@
 # ПЛАН: Профессиональный инструмент прокладки воздуховодов по нормам РФ
 
 Дата: 14.08.2026. Статус: утверждён пользователем, реализация строго по этапам 0→7 (каждый этап завершается тестами).
-**Все этапы 0–7 выполнены.** Целевой репозиторий: `pascalorg/editor` (монорепо Turborepo + Bun). Ветка разработки: `main`.
-**Следующий блок — Этапы 8–13 (углубление): сетевой расчёт (воздухообмен/расходы/балансировка), автообвод v2, спецификация и DXF v2, верификация норм, сквозная регрессия, публикация.** Реализация по той же схеме: каждый этап завершается тестами, перед переходом — `bun check` + `bun run check-types` + `bun test` зелёные.
+**Все этапы 0–8 выполнены.** Целевой репозиторий: `pascalorg/editor` (монорепо Turborepo + Bun). Ветка разработки: `main`.
+**Следующий блок — Этапы 9–13 (углубление): утка v2, спецификация и DXF v2, верификация норм, сквозная регрессия, публикация.** Реализация по той же схеме: каждый этап завершается тестами, перед переходом — `bun check` + `bun run check-types` + `bun test` зелёные.
 
 ## 1. Контекст и цель
 
@@ -183,31 +183,46 @@ UI — в `packages/editor` / `apps/editor`.
 
 ---
 
-### Этап 8 — Сетевой расчёт: воздухообмен и потери по всей сети (в работе)
+### Этап 8 — Сетевой расчёт: воздухообмен и потери по всей сети (выполнен)
 
 **Цель**: перейти от «расчёта одного участка» (`sizeDuctSection`) к расчёту всей сети П/В —
 воздухообмен по помещениям, пропагация расходов, суммарные потери и балансировка ответвлений.
 Новые модули в `packages/core/src/mep/` (чистая логика, без Three.js):
 
-1. **Воздухообмен зон → расходы трасс** (`air-exchange.ts`): связать авто-зоны (`spaceCategory`,
-   `spaceRole:'room'`) с участками трасс: для каждой комнаты посчитать требуемый расход
-   (`resolveRequiredAirflowM3h` + площадь/численность), назначить в ближайший терминал/участок
-   вытяжки или притока; результат — расход на каждом участке сети.
-2. **Пропагация расходов по сети** (`network-flows.ts`): из `buildDuctNetworks` по узлам-терминалам
-   прокачать Q от терминалов к магистрали (sum расходов терминалов на подветке), с учётом
-   `connectedToEquipment`; на выходе `segmentId → flowM3h`.
-3. **Сетевые потери и балансировка** (`network-pressure.ts`): для каждой сети П/В пройти пути от
-   оборудования до терминалов: ΣΔP по пути (`pressureDropPa` по участкам + ξ фитингов — отводы
-   сейчас в `aerodynamics.elbowZeta`, добавить ξ тройников/переходов), найти критический путь
-   (max ΔP), проверить балансировку ответвлений (расхождение ≤ 15% на узлах ветвления по практике;
-   пометить флагом, что значение рабочее до верификации по СП 60).
-4. **Подбор диаметров по сети** (`network-sizing.ts`): перебрать участки сети в порядке
-   «магистраль → ответвления», каждый `sizeDuctSection` по своему расходу/системе; единый
-   `Result` с участками, скоростями, ΔP и флагом шумовой проверки.
-5. **UI**: в панель «Вентиляция» — таблица «участок → расход, Ø ГОСТ, v, ΔP», сводка по системам
-   (ΣQ, ΣΔP, крит. путь), подсветка участков с `noiseCheckRequired` или выходом за диапазон.
-6. **Тесты**: `mep/air-exchange.test.ts`, `mep/network-flows.test.ts`, `mep/network-pressure.test.ts`,
-   `mep/network-sizing.test.ts` + интеграция в `pipeline.test.ts` (кухня 90 → расход → подбор Ø100 → ΔP).
+1. **Воздухообмен зон → расходы трасс** (`air-exchange.ts`): ✅
+   `polygonAreaM2`/`zoneCentroid` (площадь и центр комнаты по полигону зоны),
+   `computeZoneAirflows` (СП 54 + `resolveRequiredAirflowM3h`, направление П/В из таблицы),
+   `assignZoneAirflowsToTerminals` (жадное назначение каждой комнаты в ближайший
+   совместимый терминал: приток → диффузор/решётка, вытяжка → вытяжная решётка),
+   `terminalFlowMap` (несколько зон на один терминал складываются).
+2. **Пропагация расходов по сети** (`network-flows.ts`): ✅
+   `buildDuctNetworkGraphs` — общий граф сети по совпавшим портам
+   (`collectPortRecords`/`matedPortGroups` из `duct-network`): узлы-соединения, смежность,
+   остовное дерево от корня; корень — оборудование (установка), без него — узел с
+   максимальной степенью (флаг `rootedAtEquipment`). `computeNetworkFlows` прокачивает
+   Q от терминалов к магистрали: расход участка = сумма терминалов в поддереве от корня;
+   на выходе `segmentId → flowM3h`, `totalFlowM3h`, статус терминалов.
+3. **Сетевые потери и балансировка** (`network-pressure.ts`): ✅
+   для каждой сети пути от оборудования до каждого терминала: ΣΔP по пути
+   (`pressureDropPa` по участкам + ξ фитингов — отводы `elbowZeta`, утка 2×ξ отвода,
+   тройники/крестовины `teeZeta` (проход/ветка по порту соединения), переходы
+   `transitionZeta`), критический путь (max ΔP), балансировка ответвлений на узлах
+   ветвления (расхождение ≤ `BRANCH_BALANCE_TOLERANCE_PCT=15%`, помечено рабочим
+   значением до верификации по СП 60 — флаг `FITTING_ZETA_VERIFIED=false`).
+4. **Подбор диаметров по сети** (`network-sizing.ts`): ✅
+   участки каждой сети в порядке «магистраль → ответвления» (BFS от корня), каждый —
+   `sizeDuctSection` под свой расход/систему; результат с профилем ГОСТ, скоростью,
+   ΔP по трению, флагом норм-диапазона и шумовой проверки; `sizedProfiles` →
+   карта для пересчёта потерь по подобранным сечениям.
+5. **UI**: ✅ панель «Вентиляция» → секция «Расчёт сети»: сводка по системам
+   (ΣQ, критический путь ΔP, число путей, бейдж разбалансировки), таблица
+   «участок → С, Q, сечение ГОСТ, v, ΔP», подсветка участков с `noiseCheckRequired`
+   или выходом за диапазон, предупреждения балансировки/шума.
+6. **Тесты**: ✅ `mep/air-exchange.test.ts` (9), `mep/network-flows.test.ts` (5),
+   `mep/network-pressure.test.ts` (5), `mep/network-sizing.test.ts` (4) +
+   интеграция в `pipeline.test.ts` (кухня 90 → расход на участках → подбор Ø100 → ΔP).
+   Общий тест-стаб `mep/duct-network-stubs.ts` (конвенции портов без packages/nodes).
+   Проверки: `bun check` (Biome) чисто, `bun run check-types` 10/10, `bun test` — 3207 pass / 1 skip / 0 fail.
 
 ### Этап 9 — Утка v2: обход по сети, зазор при вертикальных участках, косые пересечения (в работе)
 
@@ -286,8 +301,8 @@ UI — в `packages/editor` / `apps/editor`.
 
 - `packages/core/src/schema/nodes/{duct-segment,duct-fitting,zone}.ts`
 - `packages/core/src/utils/duct-units-migration.ts` (миграция дюймы→мм; сделано)
-- `packages/core/src/mep/*` (сделано: constants, norms-types, aerodynamics, sizing, routing-rules, bypass, duct-network, gost-segmentation, specification, dxf, pipeline.test)
-- `packages/core/src/mep/{air-exchange,network-flows,network-pressure,network-sizing}.ts` (новые, Этап 8)
+- `packages/core/src/mep/*` (сделано: constants, norms-types, aerodynamics, sizing, routing-rules, bypass, duct-network, gost-segmentation, specification, dxf, air-exchange, network-flows, network-pressure, network-sizing, duct-network-stubs, pipeline.test)
+- `packages/core/src/mep/{air-exchange,network-flows,network-pressure,network-sizing}.ts` (новые, Этап 8 — сделано)
 - `packages/core/src/mep/*.test.ts` (Этап 8: air-exchange, network-flows, network-pressure, network-sizing; расширения bypass/specification/dxf/pipeline.test)
 - `packages/core/src/services/system-graph.ts`, `packages/core/src/lib/space-detection.ts`
 - `packages/nodes/src/duct-fitting/{schema,ports,parametrics,geometry,floorplan,definition}.ts`
@@ -301,5 +316,5 @@ UI — в `packages/editor` / `apps/editor`.
 
 - `bun check` — Biome lint/format. ✅ (чисто на всех этапах)
 - `bun run check-types` — typecheck. ✅
-- `bun test` — unit/integration. ✅ (итог Этапа 7: 3182 pass / 1 skip / 0 fail)
+- `bun test` — unit/integration. ✅ (итог Этапа 7: 3182 pass / 1 skip / 0 fail; итог Этапа 8: 3207 pass / 1 skip / 0 fail)
 - Перед переходом к следующему этапу — все тесты зелёные. ✅
