@@ -11,9 +11,16 @@ import {
 } from '../schema'
 import { ductSectionAreaM2, pressureDropPa, velocityMps } from './aerodynamics'
 import { assignZoneAirflowsToTerminals, computeZoneAirflows, terminalFlowMap } from './air-exchange'
-import { buildBypassMutations, detectBypassCrossings, planAllBypasses } from './bypass'
+import {
+  buildBypassMutations,
+  buildBypassRunMutations,
+  detectBypassCrossings,
+  planAllBypasses,
+  planAllBypassRuns,
+} from './bypass'
 import { resolveRequiredAirflowM3h } from './constants'
 import { registerDuctNetworkStubs } from './duct-network-stubs'
+import { ductSegmentLengthM } from './gost-segmentation'
 import { computeNetworkFlows } from './network-flows'
 import { computeNetworkPressure } from './network-pressure'
 import { sizeDuctNetworks, sizedProfiles } from './network-sizing'
@@ -366,5 +373,62 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     expect(pressure[0]!.paths).toHaveLength(1)
     expect(pressure[0]!.criticalPath).not.toBeNull()
     expect(pressure[0]!.totalPressurePa).toBeGreaterThan(0)
+  })
+
+  test('Этап 9: одна вытяжка пересекает два притока — обе утки планируются и спецификация считает обе', () => {
+    // 1) Трассы: вытяжка вдоль Z, два притока вдоль X на z=-2 и z=+2.
+    const supply1 = segment(
+      [
+        [-4, 2.6, -2],
+        [4, 2.6, -2],
+      ],
+      { id: 'duct-segment_s1', system: 'supply', diameter: 300 },
+    )
+    const supply2 = segment(
+      [
+        [-4, 2.6, 2],
+        [4, 2.6, 2],
+      ],
+      { id: 'duct-segment_s2', system: 'supply', diameter: 300 },
+    )
+    const exhaust = segment(
+      [
+        [0, 2.6, -6],
+        [0, 2.6, 6],
+      ],
+      { id: 'duct-segment_exhaust', system: 'exhaust', diameter: 160 },
+    )
+    const scene = sceneOf(supply1, supply2, exhaust)
+    expect(detectBypassCrossings(scene)).toHaveLength(2)
+
+    // 2) Run-планирование: обе утки одной командой.
+    const run = planAllBypassRuns(scene)[0]!
+    expect(run.bypasses).toHaveLength(2)
+    expect(run.skipped).toHaveLength(0)
+
+    // 3) Применяем мутации к сцене.
+    const next: Record<AnyNodeId, AnyNode> = { ...scene }
+    const mutations = buildBypassRunMutations(run, exhaust)
+    next[exhaust.id] = { ...exhaust, path: mutations.beforePath } as DuctSegmentNode
+    for (const piece of [...mutations.intermediateSegments, mutations.afterSegment]) {
+      next[piece.id] = piece
+    }
+    for (const fitting of mutations.fittings) next[fitting.id] = fitting
+    expect(detectBypassCrossings(next)).toHaveLength(0)
+
+    // 4) Спецификация видит обе утки в фасонных частях.
+    const spec = buildDuctSpecification(next, {})
+    const utkaRows = spec.sections.fittings.filter((row) => row.name.includes('Утка'))
+    expect(utkaRows).toHaveLength(1)
+    expect(utkaRows[0]!.quantity).toBe(2)
+    // Вытяжка теперь «до» + «между» + «после» (3 прямых участка); S-обходы
+    // живут в фиттингах, поэтому суммарная прямая длина меньше исходных 12 м.
+    const exhaustSegments = Object.values(next)
+      .filter((node): node is DuctSegmentNode => node.type === 'duct-segment')
+      .filter((node) => node.system === 'exhaust')
+    expect(exhaustSegments).toHaveLength(3)
+    const exhaustTotal = exhaustSegments.reduce((sum, node) => sum + ductSegmentLengthM(node), 0)
+    expect(exhaustTotal).toBeLessThan(12)
+    expect(exhaustTotal).toBeGreaterThan(8)
   })
 })

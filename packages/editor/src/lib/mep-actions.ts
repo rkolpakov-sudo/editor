@@ -4,9 +4,9 @@ import {
   type AnyNode,
   type AnyNodeId,
   type BypassPlan,
-  buildBypassMutations,
+  buildBypassRunMutations,
   DuctSegmentNode as DuctSegmentSchema,
-  planAllBypasses,
+  planAllBypassRuns,
   planGostSplit,
   useScene,
 } from '@pascal-app/core'
@@ -21,44 +21,53 @@ export type BypassApplyReport = {
 
 /**
  * Применить все запланированные обводы пересечений П/В одной командой
- * (один undo-шаг — один `applyNodeChanges`-set). Каждый обвод: обрезает
- * существующий вытяжной участок до части «до», создаёт хвостовой участок
- * «после» и фиттинг-утку. Повторные пересечения на одном вытяжном участке
- * пропускаются — второй план ссылается на уже изменённую трассу.
+ * (один undo-шаг — один `applyNodeChanges`-set). Каждый обвод планируется
+ * по всей трассе вытяжки сразу (Этап 9): существующий участок обрезается
+ * до части «до», между утками и в конце создаются прямые звенья, и
+ * фиттинги-утки. Повторные пересечения на одном вытяжном участке больше
+ * не пропускаются — планируются все, что помещаются по длине прямой.
  */
 export function applyAllBypasses(): BypassApplyReport {
   const scene = useScene.getState()
-  const { plans, skipped } = planAllBypasses(scene.nodes)
+  const runs = planAllBypassRuns(scene.nodes)
 
   const create: { node: AnyNode; parentId?: AnyNodeId }[] = []
   const update: { id: AnyNodeId; data: Partial<AnyNode> }[] = []
-  const touchedExhaustIds = new Set<AnyNodeId>()
   let applied = 0
 
-  for (const plan of plans) {
-    const exhaust = scene.nodes[plan.crossing.exhaustNodeId]
+  for (const run of runs) {
+    const exhaust = scene.nodes[run.exhaustNodeId]
     if (exhaust?.type !== 'duct-segment') continue
-    if (touchedExhaustIds.has(exhaust.id)) continue
-    const mutations = buildBypassMutations(plan, exhaust)
+    if (run.bypasses.length === 0) continue
+    const mutations = buildBypassRunMutations(run, exhaust)
     update.push({
       id: exhaust.id,
-      data: { path: plan.beforePath.map((point) => [...point]) },
+      data: { path: mutations.beforePath.map((point) => [...point]) },
     })
-    create.push({ node: mutations.afterSegment })
-    create.push({ node: mutations.fitting })
-    touchedExhaustIds.add(exhaust.id)
-    applied += 1
+    const parentId = (exhaust.parentId ?? undefined) as AnyNodeId | undefined
+    for (const intermediate of mutations.intermediateSegments) {
+      create.push({ node: intermediate, parentId })
+    }
+    create.push({ node: mutations.afterSegment, parentId })
+    for (const fitting of mutations.fittings) {
+      create.push({ node: fitting, parentId })
+    }
+    applied += run.bypasses.length
   }
 
   scene.applyNodeChanges({ create, update })
 
-  const switchedTo90 = plans.filter((plan) => plan.autoSwitchedTo90).length
+  const switchedTo90 = runs.reduce(
+    (sum, run) => sum + run.bypasses.filter((bypass) => bypass.autoSwitchedTo90).length,
+    0,
+  )
+  const skipped = runs.reduce((sum, run) => sum + run.skipped.length, 0)
   return {
     applied,
-    skipped: skipped.length,
+    skipped,
     switchedTo90,
-    skippedReasons: skipped.map(({ reason }) => reason),
-    plans,
+    skippedReasons: runs.flatMap((run) => run.skipped.map(({ reason }) => reason)),
+    plans: [],
   }
 }
 

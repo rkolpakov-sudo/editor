@@ -1,18 +1,21 @@
 import { describe, expect, test } from 'bun:test'
 import type { AnyNodeDefinition, DistributionRole, NodePort } from '../registry'
-import { registerNode } from '../registry'
+import { nodeRegistry, registerNode } from '../registry'
 import type { AnyNode, AnyNodeId } from '../schema'
 import { buildDuctNetworks, ductNetworkFor, validateDuctNetwork } from './duct-network'
 
 type Point = [number, number, number]
 
 // Stub registrations mirror the real duct kinds' port conventions so the
-// network analysis runs without importing the nodes package.
+// network analysis runs without importing the nodes package. Idempotent on
+// the actual registry — parallel workers may share it with
+// `registerDuctNetworkStubs` (see duct-network-stubs.ts).
 function stubDef(
   kind: string,
   distributionRole: DistributionRole,
   ports: (node: AnyNode) => NodePort[],
 ): void {
+  if (nodeRegistry.has(kind)) return
   registerNode({
     kind,
     schemaVersion: 1,

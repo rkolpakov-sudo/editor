@@ -1,6 +1,7 @@
 import type { AnyNodeDefinition, DistributionRole, NodePort } from '../registry'
-import { registerNode } from '../registry'
+import { nodeRegistry, registerNode } from '../registry'
 import type { AnyNode, AnyNodeId } from '../schema'
+import { computeBypassGeometry } from './bypass'
 
 /**
  * Тест-стабы duct-видов для Этапа 8 — зеркалят конвенции портов настоящих
@@ -18,14 +19,11 @@ function stubDef(
   distributionRole: DistributionRole,
   ports: (node: AnyNode) => NodePort[],
 ): void {
-  const existing = Array.from(
-    (globalThis as unknown as { __duct_stub_kinds?: string[] }).__duct_stub_kinds ?? [],
-  )
-  if (existing.includes(kind)) return
-  ;(globalThis as unknown as { __duct_stub_kinds: string[] }).__duct_stub_kinds = [
-    ...existing,
-    kind,
-  ]
+  // Идемпотентность по фактическому реестру, а не по глобальному маркеру:
+  // в параллельном прогоне в одном воркере могут делить реестр несколько
+  // файлов (direct registerNode в duct-network.test.ts / gost-segmentation.test.ts),
+  // и повторная регистрация в production-режиме бросает duplicate-kind.
+  if (nodeRegistry.has(kind)) return
   registerNode({
     kind,
     schemaVersion: 1,
@@ -138,6 +136,33 @@ export function registerDuctNetworkStubs(): void {
           id: 'outlet',
           position: offset(position, 0, leg, yaw),
           direction: [0, 0, 1],
+          diameter: 6,
+          system,
+        },
+      ]
+    }
+    if (fittingType === 'offset') {
+      // Утка (S) — коллары на оси в ±полу-пролёте от центра, зеркалит
+      // настоящий def.ports (`computeBypassGeometry` из bypass).
+      const offsetMm = (node as unknown as { offset: number }).offset ?? 100
+      const angle = (node as unknown as { angle: number }).angle ?? 45
+      const radiusFactor =
+        (node as unknown as { offsetRadiusFactor: number }).offsetRadiusFactor ?? 1.5
+      const diameter = (node as unknown as { diameter: number }).diameter ?? 160
+      const geometry = computeBypassGeometry(offsetMm, angle, radiusFactor, diameter)
+      const half = geometry ? geometry.halfSpanM : leg
+      return [
+        {
+          id: 'inlet',
+          position: offset(position, -half, 0, yaw),
+          direction: [-1, 0, 0],
+          diameter: 6,
+          system,
+        },
+        {
+          id: 'outlet',
+          position: offset(position, half, 0, yaw),
+          direction: [1, 0, 0],
           diameter: 6,
           system,
         },
