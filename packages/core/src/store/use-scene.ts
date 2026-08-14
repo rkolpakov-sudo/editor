@@ -35,6 +35,7 @@ import { type AnyNode, type AnyNodeId, AnyNode as AnyNodeSchema } from '../schem
 import { healSceneNodes } from '../utils/heal-scene-graph'
 import { removeRetiredDrawingSheetNodes } from '../utils/retired-scene-nodes'
 import { migrateVerticalSceneNodes } from '../utils/vertical-scene-migration'
+import { migrateDuctUnitsToMm } from '../utils/duct-units-migration'
 import * as nodeActions from './actions/node-actions'
 import {
   areSceneSnapshotsEqual,
@@ -941,7 +942,11 @@ function migrateNodes(nodes: Record<string, any>): {
   }
 
   const vertical = migrateVerticalSceneNodes(patchedNodes)
-  return { nodes: vertical.nodes as Record<string, AnyNode>, mintedMaterials }
+  // Duct unit switch (inches → mm) — must run before any geometry or
+  // parametrics path reads the migrated dimensions, and its output must be
+  // what's persisted so collaboration compares canonical mm values.
+  const ducts = migrateDuctUnitsToMm(vertical.nodes)
+  return { nodes: ducts.nodes as Record<string, AnyNode>, mintedMaterials }
 }
 
 function getNodeChildIds(node: AnyNode): AnyNodeId[] {

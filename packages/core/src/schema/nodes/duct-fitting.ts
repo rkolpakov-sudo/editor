@@ -46,17 +46,18 @@ export const DuctFittingNode = BaseNode.extend({
   // When non-round, `diameter` carries the area-equivalent round size
   // (drives leg lengths + advertised ports).
   shape: z.enum(['round', 'rect', 'oval']).default('rect'),
-  // Rect / oval run-leg profile in inches (used when shape ≠ 'round').
-  width: z.number().min(4).max(60).default(14),
-  height: z.number().min(3).max(40).default(8),
+  // Rect / oval run-leg profile in millimeters (used when shape ≠ 'round').
+  // GOST R 70349 sides, 100–2000.
+  width: z.number().min(100).max(2000).default(400),
+  height: z.number().min(100).max(2000).default(200),
   // Tee / cross BRANCH cross-section: a round collar at `diameter2` or a
   // rect / oval profile matching the duct drawn off the tap. When
   // non-round, `diameter2` carries the branch's area-equivalent round
   // size. A cross's two opposed branches share this one profile.
   shape2: z.enum(['round', 'rect', 'oval']).default('rect'),
-  // Rect / oval branch profile in inches (used when shape2 ≠ 'round').
-  width2: z.number().min(4).max(60).default(14),
-  height2: z.number().min(3).max(40).default(8),
+  // Rect / oval branch profile in millimeters (used when shape2 ≠ 'round').
+  width2: z.number().min(100).max(2000).default(400),
+  height2: z.number().min(100).max(2000).default(200),
   // Elbow turn angle in degrees. Residential sheet-metal elbows come in
   // 90° and 45°; adjustable elbows cover the range between. 0° is a
   // straight coupling — what an elbow flattens to when its run is dragged
@@ -67,11 +68,11 @@ export const DuctFittingNode = BaseNode.extend({
   // downstream toward the outlet (flow merges), >90° leans the branch
   // upstream toward the inlet. Ignored by every other fitting type.
   branchAngle: z.number().min(45).max(135).default(90),
-  // Main (run/inlet) nominal diameter in inches.
-  diameter: z.number().min(2).max(48).default(6),
-  // Secondary diameter in inches — tee branch collar, reducer outlet.
+  // Main (run/inlet) nominal diameter in millimeters (GOST R 70349 row).
+  diameter: z.number().min(100).max(2000).default(315),
+  // Secondary diameter in millimeters — tee branch collar, reducer outlet.
   // Ignored by elbows.
-  diameter2: z.number().min(2).max(48).default(6),
+  diameter2: z.number().min(100).max(2000).default(315),
   ductMaterial: z.enum(['sheet-metal', 'flex', 'duct-board']).default('sheet-metal'),
   system: z.enum(['supply', 'return']).default('supply'),
   slots: z.record(z.string(), z.string()).optional(),

@@ -11,3 +11,4 @@ export {
   migrateVerticalSceneNodes,
   type VerticalSceneMigration,
 } from './vertical-scene-migration'
+export { migrateDuctUnitsToMm, type DuctUnitsMigration } from './duct-units-migration'

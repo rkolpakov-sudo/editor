@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 
 /**
- * Round duct segment — a polyline of 3D points connected by cylindrical
- * duct sections. Forced-air HVAC supply/return runs in US residential.
+ * Duct segment — a polyline of 3D points connected by duct sections.
+ * Forced-air HVAC supply/return runs.
  *
  * Phase 1 of the HVAC node system: just the geometry primitive. Fittings,
  * terminals, equipment, and typed ports come in later slices.
@@ -13,8 +13,9 @@ import { BaseNode, nodeType, objectId } from '../base'
  * above the level floor. A duct hung at ceiling height through three points
  * is e.g. `[[0, 2.6, 0], [3, 2.6, 0], [3, 2.6, 4]]`.
  *
- * Diameters are nominal US round-duct sizes in inches; the geometry
- * builder converts to meters for the cylinder radius.
+ * Cross-section sizes are nominal in millimeters on the GOST R 70349 row
+ * (round Ø100–2000; rect / oval sides 100–2000). The geometry builder
+ * converts to meters for the cylinder radius.
  */
 export const DuctSegmentNode = BaseNode.extend({
   id: objectId('duct-segment'),
@@ -22,19 +23,17 @@ export const DuctSegmentNode = BaseNode.extend({
   // Polyline path in level-local meters. Minimum two points (start, end).
   path: z.array(z.tuple([z.number(), z.number(), z.number()])).min(2),
   // Cross-section. Round is the branch default; rect is the trunk /
-  // plenum profile (real US systems: rect trunk, round branches); oval
-  // is the flat-oval profile (two semicircles of the duct height joined
-  // by flat sides) used where round won't fit a joist bay.
+  // plenum profile; oval is the flat-oval profile (two semicircles of the
+  // duct height joined by flat sides) used where round won't fit a joist bay.
   shape: z.enum(['round', 'rect', 'oval']).default('round'),
-  // Nominal inner diameter in inches (round shape). Common residential
-  // sizes 4"–14"; we accept any positive number so the inspector slider
-  // stays ergonomic and larger commercial sizes load without a schema bump.
-  diameter: z.number().min(2).max(48).default(6),
-  // Rect / oval cross-section in inches: width is the horizontal face,
-  // height the vertical. Typical residential trunks 12×8 – 24×10. For
-  // oval, height is also the end-cap semicircle diameter (width ≥ height).
-  width: z.number().min(4).max(60).default(14),
-  height: z.number().min(3).max(40).default(8),
+  // Nominal inner diameter in millimeters (round shape). GOST R 70349
+  // row: 100–2000. Legacy scenes saved in inches are migrated ×25.4.
+  diameter: z.number().min(100).max(2000).default(160),
+  // Rect / oval cross-section in millimeters: width is the horizontal
+  // face, height the vertical (GOST R 70349 sides, 100–2000). For oval,
+  // height is also the end-cap semicircle diameter (width ≥ height).
+  width: z.number().min(100).max(2000).default(400),
+  height: z.number().min(100).max(2000).default(200),
   // Cross-section roll (radians) about the run direction. 0 = width
   // horizontal / height vertical (the natural orientation the geometry
   // derives from direction). Non-zero only on a rect riser turned out of
@@ -64,8 +63,8 @@ export const DuctSegmentNode = BaseNode.extend({
   Duct segment - polyline of 3D points connected by duct sections.
   - path: list of [x, y, z] points in level-local meters (min 2)
   - shape: round (branches) | rect (trunks / plenums) | oval (flat-oval, tight joist bays)
-  - diameter: nominal inner diameter in inches for round (typ. 4-14 residential)
-  - width / height: rect / oval cross-section in inches (typ. 12x8 - 24x10 trunks)
+  - diameter: nominal inner diameter in millimeters for round (GOST R 70349 row, 100-2000)
+  - width / height: rect / oval cross-section in millimeters (GOST R 70349 sides, 100-2000)
   - roll: cross-section roll in radians (0 = upright; set on risers to stay continuous through their elbow)
   - ductMaterial: sheet-metal | spiral (round rigid, helical seam) | flex | duct-board
   - seamDetail: draw the spiral seam / flex corrugation on round runs (default off)
