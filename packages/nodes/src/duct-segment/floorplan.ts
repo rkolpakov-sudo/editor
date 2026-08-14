@@ -3,6 +3,7 @@ import { MM_TO_METERS } from './geometry'
 import type { DuctSegmentNode } from './schema'
 
 const SUPPLY_CENTERLINE = '#d4825a'
+const EXHAUST_CENTERLINE = '#5ab46a'
 const RETURN_CENTERLINE = '#5a8ad4'
 const BODY_COLOR = '#9ca3af'
 /** Move-arrow stand-off past the duct body, in plan meters. */
@@ -13,10 +14,10 @@ const MIN_SEGMENT_LEN = 0.05
 /**
  * Floor-plan representation of a duct run: the path drawn at the duct's
  * real width (plan-unit stroke so it scales with zoom), with a dashed
- * centerline tinted by system — orange for supply, blue for return, the
- * same hues the 3D tint uses. Vertical risers collapse to a point in
- * plan; consecutive duplicate plan points are dropped so they don't
- * render zero-length artifacts.
+ * centerline tinted by system — orange for supply (П), green for exhaust
+ * (В), blue for return (рециркуляция). Vertical risers collapse to a
+ * point in plan; consecutive duplicate plan points are dropped so they
+ * don't render zero-length artifacts.
  */
 export function buildDuctSegmentFloorplan(
   node: DuctSegmentNode,
@@ -42,7 +43,12 @@ export function buildDuctSegmentFloorplan(
   const view = ctx.viewState
   const palette = view?.palette
   const showSelectedChrome = (view?.selected || view?.highlighted) ?? false
-  const centerline = node.system === 'supply' ? SUPPLY_CENTERLINE : RETURN_CENTERLINE
+  const centerline =
+    node.system === 'supply'
+      ? SUPPLY_CENTERLINE
+      : node.system === 'exhaust'
+        ? EXHAUST_CENTERLINE
+        : RETURN_CENTERLINE
 
   // A pure riser (single plan point) still gets a marker: a circle at
   // the duct's diameter so the vertical run is visible in plan.

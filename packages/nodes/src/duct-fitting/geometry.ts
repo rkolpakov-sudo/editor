@@ -1,6 +1,8 @@
 import type { GeometryContext } from '@pascal-app/core'
+import { computeBypassGeometry } from '@pascal-app/core'
 import type { ColorPreset, RenderShading } from '@pascal-app/viewer'
 import {
+  BoxGeometry,
   BufferGeometry,
   CylinderGeometry,
   DoubleSide,
@@ -403,6 +405,52 @@ export function buildDuctFittingGeometry(
               `fitting-stub-${id}`,
             )
       if (stub) group.add(stub)
+    }
+  } else if (node.fittingType === 'offset') {
+    // Утка: the S body extruded along the shared stage-4 centerline in the
+    // local XZ plane (run along +X, lateral along +Z), so it matches the
+    // bypass geometry exactly. Round runs are cylinders, rect/oval the
+    // same prisms the trunk uses; joint caps hide the corner seams.
+    const geometry = computeBypassGeometry(
+      node.offset,
+      node.angle,
+      node.offsetRadiusFactor,
+      node.diameter,
+    )
+    if (geometry) {
+      const pts = geometry.keyPointsLocal.map(([x, z]) => new Vector3(x, 0, z))
+      for (let i = 0; i < pts.length - 1; i += 1) {
+        const mesh =
+          node.shape === 'round'
+            ? buildSection(pts[i]!, pts[i + 1]!, radiusMain, material, `fitting-offset-${i}`)
+            : node.shape === 'oval'
+              ? buildOvalSection(
+                  pts[i]!,
+                  pts[i + 1]!,
+                  widthM,
+                  heightM,
+                  material,
+                  `fitting-offset-${i}`,
+                )
+              : buildRectSection(
+                  pts[i]!,
+                  pts[i + 1]!,
+                  widthM,
+                  heightM,
+                  material,
+                  `fitting-offset-${i}`,
+                )
+        if (mesh) group.add(mesh)
+      }
+      for (let i = 1; i < pts.length - 1; i += 1) {
+        const joint =
+          node.shape === 'round'
+            ? new Mesh(new SphereGeometry(radiusMain, RADIAL_SEGMENTS, 12), material)
+            : new Mesh(new BoxGeometry(widthM, heightM, widthM), material)
+        joint.name = `fitting-offset-joint-${i}`
+        joint.position.copy(pts[i]!)
+        group.add(joint)
+      }
     }
   } else {
     for (const port of ports) {

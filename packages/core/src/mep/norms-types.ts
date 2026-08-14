@@ -9,9 +9,8 @@ export { SPACE_CATEGORIES }
  *   exhaust → В (вытяжка)
  *   return  → рециркуляция (возврат воздуха в установку)
  *
- * Schemas currently persist `'supply' | 'return'`; `exhaust` joins them on
- * the MEP stage-4 schema change. The engine already reads all three so it
- * can route П/В bypasses and mark systems per ГОСТ.
+ * The duct-segment / duct-fitting schemas persist all three (stage-4
+ * schema change). The engine routes П/В bypasses and marks systems per ГОСТ.
  */
 export type SystemType = 'supply' | 'exhaust' | 'return'
 

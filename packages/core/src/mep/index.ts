@@ -1,4 +1,5 @@
 export * from './aerodynamics'
+export * from './bypass'
 export * from './constants'
 export * from './duct-network'
 export * from './norms-types'

@@ -55,8 +55,10 @@ export const DuctSegmentNode = BaseNode.extend({
   // values are R-4.2, R-6, R-8.
   insulationR: z.number().min(0).max(12).default(0.5),
   // Which side of the air loop this segment belongs to. Drives visual tint
-  // and (in later slices) System graph membership.
-  system: z.enum(['supply', 'return']).default('supply'),
+  // and System graph membership. П / В / рециркуляция per ГОСТ 21.602:
+  // supply (П) feeds, exhaust (В) extracts, return (рециркуляция) sends
+  // air back to the unit.
+  system: z.enum(['supply', 'exhaust', 'return']).default('supply'),
   slots: z.record(z.string(), z.string()).optional(),
 }).describe(
   dedent`
@@ -70,7 +72,7 @@ export const DuctSegmentNode = BaseNode.extend({
   - seamDetail: draw the spiral seam / flex corrugation on round runs (default off)
   - insulated: whether the run wears its external insulation wrap (default off)
   - insulationR: external insulation R-value when insulated (4, 6, 8 typical)
-  - system: supply | return (drives visual tint)
+  - system: supply | exhaust | return (П / В / рециркуляция; drives visual tint)
   `,
 )
 export type DuctSegmentNode = z.infer<typeof DuctSegmentNode>

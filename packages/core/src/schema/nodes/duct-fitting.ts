@@ -32,6 +32,10 @@ import { BaseNode, nodeType, objectId } from '../base'
  *   - transition: square-to-round — rect end at `width` × `height` faces
  *              -X, round end at `diameter2` faces +X. `diameter` carries
  *              the rect end's area-equivalent round size.
+ *   - offset: horizontal S / утка — the run shifts laterally by `offset`
+ *              (mm) over two bends of `angle`° (R = `offsetRadiusFactor`×D)
+ *              and returns to the original axis. Ports sit on the run axis
+ *              at ±half-span, so the S reads as one in-line piece.
  */
 export const DuctFittingNode = BaseNode.extend({
   id: objectId('duct-fitting'),
@@ -40,7 +44,9 @@ export const DuctFittingNode = BaseNode.extend({
   position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   // XYZ euler radians.
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
-  fittingType: z.enum(['elbow', 'tee', 'cross', 'reducer', 'transition']).default('elbow'),
+  fittingType: z
+    .enum(['elbow', 'tee', 'cross', 'reducer', 'transition', 'offset'])
+    .default('elbow'),
   // Run-leg cross-section: round collars, or a rect / flat-oval profile
   // matching the trunk the fitting sits in. Reducers ignore the shape.
   // When non-round, `diameter` carries the area-equivalent round size
@@ -61,7 +67,9 @@ export const DuctFittingNode = BaseNode.extend({
   // Elbow turn angle in degrees. Residential sheet-metal elbows come in
   // 90° and 45°; adjustable elbows cover the range between. 0° is a
   // straight coupling — what an elbow flattens to when its run is dragged
-  // into line with the fixed collar.
+  // into line with the fixed collar. For an `offset` (утка) it is the bend
+  // angle of each of the S's four bends (45° default, 90° tight-space
+  // fallback).
   angle: z.number().min(0).max(90).default(90),
   // Tee branch angle in degrees, measured off the +X (outlet) axis: 90°
   // is a square straight tee, <90° a lateral whose branch sweeps
@@ -73,25 +81,34 @@ export const DuctFittingNode = BaseNode.extend({
   // Secondary diameter in millimeters — tee branch collar, reducer outlet.
   // Ignored by elbows.
   diameter2: z.number().min(100).max(2000).default(315),
+  // Lateral axis displacement of an `offset` fitting, mm — how far the S
+  // carries the run off its original axis and back. Defaults to the stage-4
+  // bypass's minimum: supply body + 2 × 50 mm gap (BYPASS_MIN_GAP_MM).
+  offset: z.number().min(50).max(2000).default(100),
+  // Bend radius of an `offset` fitting as a multiple of the duct size
+  // (R = offsetRadiusFactor × D). ГОСТ-типичный отвод 1.5D.
+  offsetRadiusFactor: z.number().min(1).max(2).default(1.5),
   ductMaterial: z.enum(['sheet-metal', 'flex', 'duct-board']).default('sheet-metal'),
-  system: z.enum(['supply', 'return']).default('supply'),
+  system: z.enum(['supply', 'exhaust', 'return']).default('supply'),
   slots: z.record(z.string(), z.string()).optional(),
 }).describe(
   dedent`
-  Duct fitting - elbow, tee, cross, reducer, or square-to-round transition between duct runs.
+  Duct fitting - elbow, tee, cross, reducer, square-to-round transition, or offset (утка) between duct runs.
   - position: [x, y, z] level-local meters
   - rotation: [x, y, z] euler radians
-  - fittingType: elbow | tee | cross | reducer | transition (rect end -X, round end +X)
+  - fittingType: elbow | tee | cross | reducer | transition (rect end -X, round end +X) | offset (S, ports on the run axis)
   - shape: round | rect | oval run legs (matches the trunk; ignored by reducer / transition)
-  - width / height: rect / oval run-leg profile in inches (transition: the rect end)
+  - width / height: rect / oval run-leg profile in mm (transition: the rect end)
   - shape2: round | rect | oval tee / cross branch (matches the duct drawn off the tap)
-  - width2 / height2: rect / oval branch profile in inches
-  - angle: elbow turn in degrees (45 or 90 typical)
+  - width2 / height2: rect / oval branch profile in mm
+  - angle: elbow turn in degrees (45 or 90 typical); offset S bend angle (45 default, 90 tight-space fallback)
   - branchAngle: tee branch angle off the outlet axis (90 straight tee, 45 downstream lateral, 135 upstream); cross branches are always square
-  - diameter: main nominal diameter in inches
-  - diameter2: tee / cross branch / reducer outlet / transition round-end diameter in inches
+  - diameter: main nominal diameter in mm
+  - diameter2: tee / cross branch / reducer outlet / transition round-end diameter in mm
+  - offset: lateral axis displacement of the offset (утка), mm
+  - offsetRadiusFactor: offset bend radius as R/D (default 1.5)
   - ductMaterial: sheet-metal | flex | duct-board
-  - system: supply | return
+  - system: supply | exhaust | return
   `,
 )
 export type DuctFittingNode = z.infer<typeof DuctFittingNode>

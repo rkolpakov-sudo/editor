@@ -101,7 +101,7 @@ export const ductSegmentParametrics: ParametricDescriptor<DuctSegmentNode> = {
         {
           key: 'system',
           kind: 'enum',
-          options: ['supply', 'return'],
+          options: ['supply', 'exhaust', 'return'],
           display: 'segmented',
         },
         {

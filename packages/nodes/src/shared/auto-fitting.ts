@@ -149,7 +149,7 @@ export function planElbowAtPort(
   const joint = planCornerJoint(port, awayDir, fittingLegLength(profileDiameterMm(profile)))
   if (!joint) return null
 
-  const system = port.system === 'return' ? 'return' : 'supply'
+  const system = port.system ?? 'supply'
   // Built from the schema directly (defaults fill the rest) — importing
   // the fitting's definition here would drag the editor package into the
   // module graph, which test runners and non-editor embedders can't load.

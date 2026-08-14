@@ -1,4 +1,5 @@
 import type { NodePort } from '@pascal-app/core'
+import { computeBypassGeometry } from '@pascal-app/core'
 import { Euler, Vector3 } from 'three'
 import type { DuctFittingNode } from './schema'
 
@@ -7,6 +8,29 @@ const MM_TO_METERS = 0.001
 // shared with pipe / hvac-equipment / duct-terminal ports. Node dims are
 // millimeters; only the port boundary converts.
 const INCHES_PER_MM = 25.4
+
+/** The port diameter (mm) an offset fitting presents — the S is built at
+ *  the run's cross-section, so `diameter` carries it (equivalent round for
+ *  non-round profiles, per the duct-fitting derive). */
+export function offsetPortDiameterMm(node: DuctFittingNode): number {
+  return node.diameter
+}
+
+/**
+ * Half of the offset fitting's longitudinal span — how far each collar
+ * sticks out along the run axis. Matches the stage-4 bypass geometry:
+ * two bends of `angle`° at `offsetRadiusFactor`×D carrying the run
+ * laterally by `offset` mm and back (middle section spans the offset).
+ */
+export function offsetHalfSpanM(node: DuctFittingNode): number {
+  const geometry = computeBypassGeometry(
+    node.offset,
+    node.angle,
+    node.offsetRadiusFactor,
+    node.diameter,
+  )
+  return geometry?.halfSpanM ?? 0
+}
 
 /**
  * Collar stub length in meters — how far each port sticks out from the
@@ -112,6 +136,26 @@ export function localFittingPorts(node: DuctFittingNode): LocalPort[] {
         position: new Vector3(0, 0, -branch),
         direction: new Vector3(0, 0, -1),
         diameter: node.diameter2 / INCHES_PER_MM,
+      },
+    ]
+  }
+  if (node.fittingType === 'offset') {
+    // Утка: an in-line S that shifts the run laterally and returns to the
+    // axis. Both collars sit on the run axis at ±half-span; the S body
+    // bulges in the XZ plane between them.
+    const half = offsetHalfSpanM(node)
+    return [
+      {
+        id: 'inlet',
+        position: new Vector3(-half, 0, 0),
+        direction: new Vector3(-1, 0, 0),
+        diameter: node.diameter / INCHES_PER_MM,
+      },
+      {
+        id: 'outlet',
+        position: new Vector3(half, 0, 0),
+        direction: new Vector3(1, 0, 0),
+        diameter: node.diameter / INCHES_PER_MM,
       },
     ]
   }

@@ -4,7 +4,7 @@ import { type AnyNodeId, type NodePort, nodeRegistry, useScene } from '@pascal-a
 export type ScenePort = NodePort & { nodeId: AnyNodeId }
 
 /** Air-loop port systems — what duct runs and fittings snap to. */
-export const DUCT_PORT_SYSTEMS = ['supply', 'return'] as const
+export const DUCT_PORT_SYSTEMS = ['supply', 'exhaust', 'return'] as const
 /** DWV port systems — what drain / waste / vent pipe runs snap to. */
 export const DWV_PORT_SYSTEMS = ['waste', 'vent'] as const
 /** Refrigerant-loop port system — what linesets snap to. */

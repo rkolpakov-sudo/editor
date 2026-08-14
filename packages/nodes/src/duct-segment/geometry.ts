@@ -40,9 +40,10 @@ function pickInsulationThickness(r: number): number {
   return (INSULATION_BASE_IN + r * INSULATION_INCHES_PER_R) * INCHES_TO_METERS
 }
 
-// Supply/return tint — kept only for the spiral seam ridge accent; the duct
-// body itself is plain white (see createDuctMaterial).
+// Supply / exhaust / return tint — kept only for the spiral seam ridge
+// accent; the duct body itself is plain white (see createDuctMaterial).
 const SUPPLY_COLOR = '#d4825a'
+const EXHAUST_COLOR = '#5ab46a'
 const RETURN_COLOR = '#5a8ad4'
 
 const RADIAL_SEGMENTS = 24
@@ -347,12 +348,13 @@ function helixRidgeFor(
 
 type DuctAppearance = {
   ductMaterial: 'sheet-metal' | 'spiral' | 'flex' | 'duct-board'
-  system: 'supply' | 'return'
+  system: 'supply' | 'exhaust' | 'return'
   slots?: Record<string, string>
 }
 
 function getSystemTint(node: DuctAppearance): string {
-  return node.system === 'supply' ? SUPPLY_COLOR : RETURN_COLOR
+  if (node.system === 'supply') return SUPPLY_COLOR
+  return node.system === 'exhaust' ? EXHAUST_COLOR : RETURN_COLOR
 }
 
 /**

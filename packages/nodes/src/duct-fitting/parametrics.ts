@@ -206,7 +206,7 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'fittingType',
           kind: 'enum',
-          options: ['elbow', 'tee', 'cross', 'reducer', 'transition'],
+          options: ['elbow', 'tee', 'cross', 'reducer', 'transition', 'offset'],
           display: 'segmented',
         },
         {
@@ -216,7 +216,25 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
           min: 0,
           max: 90,
           step: 15,
-          visibleIf: (n) => n.fittingType === 'elbow',
+          visibleIf: (n) => n.fittingType === 'elbow' || n.fittingType === 'offset',
+        },
+        {
+          key: 'offset',
+          kind: 'number',
+          unit: 'mm',
+          min: 50,
+          max: 2000,
+          step: 5,
+          visibleIf: (n) => n.fittingType === 'offset',
+        },
+        {
+          key: 'offsetRadiusFactor',
+          kind: 'number',
+          unit: 'R/D',
+          min: 1,
+          max: 2,
+          step: 0.1,
+          visibleIf: (n) => n.fittingType === 'offset',
         },
         {
           key: 'branchAngle',
@@ -230,7 +248,7 @@ export const ductFittingParametrics: ParametricDescriptor<DuctFittingNode> = {
         {
           key: 'system',
           kind: 'enum',
-          options: ['supply', 'return'],
+          options: ['supply', 'exhaust', 'return'],
           display: 'segmented',
         },
       ],

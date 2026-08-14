@@ -64,12 +64,15 @@ Invoke the `review-architecture` skill (`.agents/skills/review-architecture/SKIL
 - Авто-зоны помещений — автоматически из замкнутых контуров стен, удаляются при размыкании, видны по умолчанию.
 - Расчётный движок и правила — в `packages/core` (чистая логика, без Three.js); UI — в `packages/editor`/`apps/editor`.
 
-Статус: **Этапы 0–3 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
+Статус: **Этапы 0–4 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
 коммиты `19224724`, `7f1aede5`, `31a7060f`; авто-зоны помещений: create/update/delete из замкнутых контуров,
 room-зоны видны без слоя zones, `zone.ts` получил `spaceCategory`; расчётный движок `packages/core/src/mep/`:
-constants, norms-types, aerodynamics, sizing, routing-rules, duct-network — 55 тестов). Следующий — Этап 4
-(обвод пересечений П/В — утка: schema `system: 'supply'|'exhaust'|'return'`, `fittingType:'offset'`,
-`packages/core/src/mep/bypass.ts`). Архитектурно-чувствительные
+constants, norms-types, aerodynamics, sizing, routing-rules, duct-network, bypass — 70 тестов; schema:
+`system: 'supply'|'exhaust'|'return'`, `fittingType:'offset'` (утка) + `offset`/`offsetRadiusFactor`; сервис
+автообвода `packages/core/src/mep/bypass.ts`: детекция П/В, геометрия S 45/90 (R=1.5D), зазор ≥50 мм,
+split сегмента + фиттинг утка, пересчёт ΔP/Σξ/подбор по ГОСТ; фиттинг утка рендерится в nodes).
+Следующий — Этап 5 (UI: панель «Вентиляция», маркировка П1/В1, инспекторы, кнопка «Автообвод»).
+Архитектурно-чувствительные
 изменения (новая схема/система/инструмент) — сначала читать `wiki/architecture/` по правилам ниже.
 
 ## Operating rules
