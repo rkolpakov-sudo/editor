@@ -20,6 +20,9 @@
 
 ### Fixes
 
+- **Duct placement routed overhead by default** (СП 60/СП 73). The duct draw tool laid every run on the floor (`ceilingMode` off by default → point Y = 0), violating the normative requirement that воздуховоды hang under the ceiling/slab with a 50–150 mm clearance (`DUCT_CLEARANCE_MM`). Ceiling routing is now ON by default: points land at `top − clearance − halfHeight` under the ceiling actually covering them (falling back to the level storey top, never the floor), free-placed duct fittings do the same, and `C` toggles floor placement for risers/special runs. Verified in the live editor: a freshly drawn duct sits at y=2.29 m (ceiling 2.5 − 0.1 − 0.1) vs. legacy y=0.
+
+
 - Normalize repository line endings to LF via `.gitattributes` (`* text=auto eol=lf`), so `bun check` (Biome, which validates LF) passes on Windows checkouts instead of flagging every file as CRLF-reformatted. Also fixed the six latent formatting violations from MEP stage 1 that the CRLF wall had masked (missing trailing newline in `duct-units-migration.ts`, collapsed signatures in `duct-segment/tool.tsx`, import ordering in `use-scene.ts`/`scene-migrations.ts`/`duct-fitting/parametrics.ts`, indentation in `auto-fitting.test.ts`).
 - CLI managed runtime now verifies recorded editor/MCP process identity on Windows (via `Get-CimInstance Win32_Process`) instead of always refusing force-stop. Previously `stopEditor({force: true})` threw `state_conflict` on win32, leaving detached editor and MCP subprocesses running — which hung `bun test` until they were killed.
 - Preserve custom scene materials across save, load, clone, fork, and live sync. Materials were dropped at every persistence boundary, so a scene reopened with default surfaces. Collections were dropped on MCP import for the same reason ([#597](https://github.com/pascalorg/editor/pull/597)) by [@ShiroKSH](https://github.com/ShiroKSH)
