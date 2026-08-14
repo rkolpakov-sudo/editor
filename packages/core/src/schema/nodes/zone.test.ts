@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { ZoneNode } from './zone'
+import { SPACE_CATEGORIES, ZoneNode } from './zone'
 
 describe('ZoneNode architectural room data', () => {
   test('keeps legacy zones generic while supplying room-safe defaults', () => {
@@ -15,6 +15,7 @@ describe('ZoneNode architectural room data', () => {
 
     expect(zone).toMatchObject({
       spaceRole: 'generic',
+      spaceCategory: 'public',
       roomNumber: '',
       enclosureStatus: 'auto',
       floorFinish: '',
@@ -36,6 +37,7 @@ describe('ZoneNode architectural room data', () => {
         [4, 3],
       ],
       spaceRole: 'room',
+      spaceCategory: 'office_permanent',
       roomNumber: '101',
       enclosureStatus: 'enclosed',
       floorFinish: 'Timber',
@@ -47,7 +49,38 @@ describe('ZoneNode architectural room data', () => {
     })
 
     expect(room.spaceRole).toBe('room')
+    expect(room.spaceCategory).toBe('office_permanent')
     expect(room.roomNumber).toBe('101')
     expect(room.clearDimensionPolicy).toBe('inside-faces')
+  })
+
+  test('rejects an unknown spaceCategory', () => {
+    expect(() =>
+      ZoneNode.parse({
+        id: 'zone_unknown',
+        name: 'Storage',
+        polygon: [
+          [0, 0],
+          [4, 0],
+          [4, 3],
+        ],
+        spaceCategory: 'server-room',
+      }),
+    ).toThrow()
+  })
+
+  test('exposes the full SP air-exchange category row', () => {
+    expect(SPACE_CATEGORIES).toEqual([
+      'kitchen_gas',
+      'kitchen_electric',
+      'bath',
+      'toilet',
+      'combined_wc',
+      'living',
+      'office_short',
+      'office_permanent',
+      'public',
+      'industrial',
+    ])
   })
 })

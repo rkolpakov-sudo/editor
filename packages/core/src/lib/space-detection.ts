@@ -108,7 +108,9 @@ export type AutoCeilingSyncPlan = {
 }
 
 export type AutoZoneSyncPlan = {
+  create: ZoneNodeType[]
   update: Array<{ id: ZoneNodeType['id']; data: Partial<ZoneNodeType> }>
+  delete: Array<ZoneNodeType['id']>
 }
 
 const DEFAULT_AUTO_SLAB_ELEVATION = 0.05
@@ -891,6 +893,24 @@ function nextAutoRoomName(
   return `Room ${maxIndex + 1} ${suffix}`
 }
 
+// Auto-detected rooms name themselves on the same "Room N" series as the
+// auto slabs/ceilings they share a footprint with (a zone IS the room, so no
+// extra suffix).
+function nextAutoZoneName(nodes: Array<{ name?: string }>) {
+  let maxIndex = 0
+
+  for (const node of nodes) {
+    const match = /^Room\s+(\d+)$/i.exec((node.name ?? '').trim())
+    if (!match) continue
+    const index = Number(match[1])
+    if (Number.isFinite(index)) {
+      maxIndex = Math.max(maxIndex, index)
+    }
+  }
+
+  return `Room ${maxIndex + 1}`
+}
+
 function sameTuplePolygon(current: Array<[number, number]>, next: Array<[number, number]>) {
   return (
     current.length === next.length &&
@@ -1670,16 +1690,26 @@ export function planAutoZonesForLevel(
   existingZones: readonly ZoneNodeType[],
 ): AutoZoneSyncPlan {
   const update: AutoZoneSyncPlan['update'] = []
+  const matchedSpaceIds = new Set<string>()
+  const matchedZoneIds = new Set<string>()
 
   for (const zone of existingZones) {
     const storedSignature = polygonSignature(zone.polygon.map(pointFromTuple))
     const matchingSpace =
       zone.autoFromWalls && zone.boundaryWallIds.length >= 3
-        ? spaces.find((space) => sameStringSet(space.wallIds, zone.boundaryWallIds))
+        ? spaces.find(
+            (space) =>
+              !matchedSpaceIds.has(space.id) && sameStringSet(space.wallIds, zone.boundaryWallIds),
+          )
         : spaces.find(
-            (space) => polygonSignature(space.polygon.map(pointFromTuple)) === storedSignature,
+            (space) =>
+              !matchedSpaceIds.has(space.id) &&
+              polygonSignature(space.polygon.map(pointFromTuple)) === storedSignature,
           )
     if (!matchingSpace) continue
+
+    matchedZoneIds.add(zone.id)
+    matchedSpaceIds.add(matchingSpace.id)
 
     const data: Partial<ZoneNodeType> = {}
     if (!zone.autoFromWalls) data.autoFromWalls = true
@@ -1692,7 +1722,34 @@ export function planAutoZonesForLevel(
     if (Object.keys(data).length > 0) update.push({ id: zone.id, data })
   }
 
-  return { update }
+  // Every detected room gets an auto zone on its first pass. Naming walks the
+  // full existing+planned set so two rooms enclosed by the same commit cannot
+  // collide on "Room 1".
+  const plannedNames: Array<{ name?: string }> = [...existingZones]
+  const create: AutoZoneSyncPlan['create'] = []
+  for (const space of spaces) {
+    if (matchedSpaceIds.has(space.id)) continue
+    const name = nextAutoZoneName(plannedNames)
+    plannedNames.push({ name })
+    create.push(
+      ZoneNode.parse({
+        name,
+        polygon: space.polygon,
+        autoFromWalls: true,
+        boundaryWallIds: space.wallIds,
+        spaceRole: 'room',
+        color: '#3b82f6',
+      }),
+    )
+  }
+
+  // An auto zone whose enclosing contour opened (its room vanished) is
+  // deleted. Manual zones are never touched — only engine-created rooms.
+  const zonesToDelete: AutoZoneSyncPlan['delete'] = existingZones
+    .filter((zone) => zone.autoFromWalls && !matchedZoneIds.has(zone.id))
+    .map((zone) => zone.id)
+
+  return { create, update, delete: zonesToDelete }
 }
 
 export function resolveAutoZonePolygon(
@@ -1714,6 +1771,30 @@ export function resolveAutoZonePolygon(
     ),
   )
   return room ? room.polygon.map(pointToTuple) : zone.polygon
+}
+
+function syncAutoZonesForLevel(
+  levelId: string,
+  spaces: readonly Space[],
+  existingZones: readonly ZoneNodeType[],
+  sceneStore: any,
+): AutoZoneSyncPlan {
+  const plan = planAutoZonesForLevel(spaces, existingZones)
+  const { createNodes, deleteNodes, updateNodes } = sceneStore.getState()
+
+  if (plan.delete.length > 0) {
+    deleteNodes(plan.delete)
+  }
+
+  if (plan.update.length > 0) {
+    updateNodes(plan.update)
+  }
+
+  if (plan.create.length > 0) {
+    createNodes(plan.create.map((node) => ({ node, parentId: levelId })))
+  }
+
+  return plan
 }
 
 export function planAutoSlabsForLevel(
@@ -2201,11 +2282,12 @@ function runSpaceDetection(
         },
       },
     )
-    const zonePlan = planAutoZonesForLevel(
+    syncAutoZonesForLevel(
+      levelId,
       spaces,
       zones.map((zone: any) => ZoneNode.parse(zone)),
+      sceneStore,
     )
-    if (zonePlan.update.length > 0) updateNodes(zonePlan.update)
 
     for (const space of spaces) {
       nextSpaces[space.id] = space
@@ -2347,11 +2429,14 @@ function runIndexedSpaceDetection(
   }
 
   const spaces = topologyDelta.allCurrentRooms.map((room) => buildSpace(levelId, room))
-  const zones: ZoneNodeType[] = levelChildren(nodes, levelId)
-    .filter((node: any): node is ZoneNodeType => node.type === 'zone')
-    .map((zone: ZoneNodeType) => ZoneNode.parse(zone))
-  const zonePlan = planAutoZonesForLevel(spaces, zones)
-  if (zonePlan.update.length > 0) updateNodes(zonePlan.update)
+  syncAutoZonesForLevel(
+    levelId,
+    spaces,
+    levelChildren(nodes, levelId)
+      .filter((node: any): node is ZoneNodeType => node.type === 'zone')
+      .map((zone: ZoneNodeType) => ZoneNode.parse(zone)),
+    sceneStore,
+  )
 
   const existingSpaces = editorStore.getState().spaces as Record<string, Space>
   const nextSpaces: Record<string, Space> = {}

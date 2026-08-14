@@ -5,6 +5,7 @@
 ### Features
 
 - Duct units switched from nominal inches to millimeters on the GOST R 70349 row (MEP stage 1). `duct-segment` and `duct-fitting` store sizes in mm (round Ø100–2000, default 160; rect/oval sides 100–2000, default 400×200) with schemaVersion 2. Legacy scenes saved in inches are migrated on load by `migrateDuctUnitsToMm` (exact ×25.4, idempotent via `metadata.migratedFromInches`), and the draw tool snaps to the GOST diameter row.
+- Auto room zones from closed wall loops (MEP stage 2). Every detected room materializes as an auto zone (`autoFromWalls`, `spaceRole: 'room'`, `spaceCategory`), stays in sync with live wall edits — polygon and boundary walls update on reshape, the zone is deleted when its enclosing contour opens — and always renders in every structure layer (rooms no longer wait for the zones toggle; generic site zones still do). Zones now carry `spaceCategory` (`kitchen_gas`/`kitchen_electric`/`bath`/`toilet`/`combined_wc`/`living`/`office_short`/`office_permanent`/`public`/`industrial`, default `public`), the SP 54 air-exchange category consumed by the MEP engine (stage 3+).
 - Undo/Redo buttons in the viewer toolbar (top-left, alongside the collapse and view-mode controls). The buttons subscribe to the history store via `subscribeHistoryCommandState`, dispatch through `runUndo`/`runRedo` (respecting the collaborative history delegate), and disable when nothing can be undone/redone. Keyboard shortcuts were already wired: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo.
 
 ### Fixes

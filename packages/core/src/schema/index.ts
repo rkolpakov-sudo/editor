@@ -268,6 +268,7 @@ export {
   WindowNode,
   WindowType,
 } from './nodes/window'
+export type { SpaceCategory } from './nodes/zone'
 export { ZoneNode } from './nodes/zone'
 export { generateSceneMaterialId, SceneMaterial, type SceneMaterialId } from './scene-material'
 export { MAX_TERRAIN_SIDE, TerrainData } from './terrain'

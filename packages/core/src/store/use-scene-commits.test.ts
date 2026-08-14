@@ -371,6 +371,9 @@ describe('scene commit boundary', () => {
         publishedNodes.filter((node) => node.type === 'ceiling' && node.autoFromWalls),
       ).toHaveLength(1)
       expect(
+        publishedNodes.filter((node) => node.type === 'zone' && node.autoFromWalls),
+      ).toHaveLength(1)
+      expect(
         publishedNodes
           .filter((node) => node.type === 'wall')
           .every((wall) => wall.frontSide !== 'unknown' || wall.backSide !== 'unknown'),
@@ -389,6 +392,7 @@ describe('scene commit boundary', () => {
         'ceiling',
         'slab',
         'wall',
+        'zone',
       ])
 
       stopDetection()
@@ -421,6 +425,11 @@ describe('scene commit boundary', () => {
       ).toHaveLength(2)
       expect(
         receiverNodes.filter((node) => node.type === 'ceiling' && node.autoFromWalls),
+      ).toHaveLength(2)
+      // The single room split in two: the original auto zone is deleted and
+      // each new room gets its own.
+      expect(
+        receiverNodes.filter((node) => node.type === 'zone' && node.autoFromWalls),
       ).toHaveLength(2)
     } finally {
       stopDetection()

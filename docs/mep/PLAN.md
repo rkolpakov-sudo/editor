@@ -22,9 +22,9 @@
 | Параметрика фиттингов | `packages/nodes/src/duct-fitting/parametrics.ts` | derive/reconcile/onDelete; matedDucts по колларам; MATE_TOL_M=0.05; leg length = max(0.14, r×2.5) |
 | Порты фиттингов | `packages/nodes/src/duct-fitting/ports.ts` | локальные порты (inlet/outlet/branch), конвенции XZ; getDuctFittingPorts |
 | Геометрия/план фиттинга | `duct-fitting/{geometry,floorplan,definition}.ts` | def.geometry/floorplan, keyboardActions R/T rotate ±45°, axisCycling |
-| Движок помещений | `packages/core/src/lib/space-detection.ts` | detectSpacesForLevel:2081, planAutoZonesForLevel:1668, resolveAutoZonePolygon:1698, syncAutoSlabsForLevel:1839, live-синк :2204/:2353 |
-| Зоны | `packages/core/src/schema/nodes/zone.ts` | autoFromWalls, boundaryWallIds, enclosureStatus, spaceRole, roomNumber, occupancy, ceilingHeight; **нет spaceCategory** |
-| Видимость зон | `packages/editor/src/components/viewer-zone-system.tsx:33-34` | гейт видимости |
+| Движок помещений | `packages/core/src/lib/space-detection.ts` | detectSpacesForLevel:2081, planAutoZonesForLevel:1688 (create/update/delete), resolveAutoZonePolygon, syncAutoSlabsForLevel, syncAutoZonesForLevel, live-синк :2204/:2353 |
+| Зоны | `packages/core/src/schema/nodes/zone.ts` | autoFromWalls, boundaryWallIds, enclosureStatus, spaceRole, roomNumber, occupancy, ceilingHeight; **spaceCategory** (по СП, default `public`) |
+| Видимость зон | `packages/editor/src/components/systems/zone/zone-system.tsx`, `viewer-zone-system.tsx` | room-зоны видны в любом structureLayer; generic-зоны — только в режиме zones |
 | Расчётный движок вентиляции | — | **ОТСУТСТВУЕТ** |
 | Undo/Redo | `packages/editor/src/lib/history.ts` | runUndo/runRedo, useEditor; Ctrl+Z/Ctrl+Shift+Z; кнопки в тулбаре |
 | Экспорт/IFC/MCP | `apps/ifc-converter`, `packages/mcp/src/tools/*` | базовые тулзы |
@@ -90,10 +90,18 @@ UI — в `packages/editor` / `apps/editor`.
 - Порты фиттингов рекламируют `diameter` в дюймах (кросс-видовая конвенция) — `/25.4` на выходе. ✅
 - Коммиты: `7f1aede5` (core), `31a7060f` (nodes).
 
-### Этап 2 — Авто-зоны помещений (используем готовый движок)
-- Привязать `planAutoZonesForLevel` (create/update/delete) + live-синк (размыкание контура → авто-зона удаляется).
-- Видимость по умолчанию: включить зоны (гейт `viewer-zone-system.tsx:33-34`).
-- `zone.ts`: добавить `spaceCategory` (по СП: kitchen_gas/kitchen_electric/bath/toilet/combined_wc/living/office_short/office_permanent/public/industrial), связать с таблицей воздухообмена.
+### Этап 2 — Авто-зоны помещений (используем готовый движок) (выполнен)
+- Привязать `planAutoZonesForLevel` (create/update/delete) + live-синк (размыкание контура → авто-зона удаляется). ✅
+  `planAutoZonesForLevel` (`space-detection.ts`) теперь возвращает `{create, update, delete}`:
+  для каждого детектированного space создаётся авто-зона (`autoFromWalls`, `spaceRole:'room'`, имя «Room N»),
+  авто-зона без соответствующего space удаляется (контур разомкнут), ручные зоны не трогаются.
+  Подключено через `syncAutoZonesForLevel` в оба пути детекции (`runSpaceDetection`, `runIndexedSpaceDetection`).
+  Авто-зоны попадают в тот же undo-коммит, что и правка стены.
+- Видимость по умолчанию: комнаты видны без слоя zones. ✅ `zone-system.tsx` / `viewer-zone-system.tsx`:
+  room-зоны (`spaceRole:'room'` или `autoFromWalls`) показываются в любом structureLayer; generic-зоны (газон/вода) — только в режиме zones.
+- `zone.ts`: добавить `spaceCategory` (по СП: kitchen_gas/kitchen_electric/bath/toilet/combined_wc/living/office_short/office_permanent/public/industrial), связать с таблицей воздухообмена. ✅
+  `SPACE_CATEGORIES` + поле `spaceCategory` (default `'public'`) + экспорт типа из `schema/index.ts`;
+  значения соответствуют таблице `docs/mep/01-air-exchange-residential.md`.
 
 ### Этап 3 — Модель данных расчёта (`packages/core`, чистая логика)
 Новый модуль `packages/core/src/mep/`:

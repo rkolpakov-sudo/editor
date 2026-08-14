@@ -28,6 +28,10 @@ function roomPolygon() {
   return square.map(([x, y]) => ({ x, y }))
 }
 
+function squareSpace() {
+  return detectSpacesForLevel('level-1', squareWalls()).spaces[0]!
+}
+
 function squareWalls(height = 2.5) {
   return [
     WallNode.parse({ start: [0, 0], end: [4, 0], height }),
@@ -2274,6 +2278,154 @@ describe('procedural zones', () => {
     })
 
     expect(planAutoZonesForLevel(spaces, [zone]).update).toHaveLength(0)
+  })
+
+  test('creates an auto room zone for a newly enclosed room', () => {
+    const walls = squareWalls()
+    const { spaces } = detectSpacesForLevel('level-1', walls)
+    const plan = planAutoZonesForLevel(spaces, [])
+
+    expect(plan.create).toHaveLength(1)
+    expect(plan.update).toHaveLength(0)
+    expect(plan.delete).toHaveLength(0)
+
+    const zone = plan.create[0]
+    expect(zone?.name).toBe('Room 1')
+    expect(zone?.spaceRole).toBe('room')
+    expect(zone?.spaceCategory).toBe('public')
+    expect(zone?.autoFromWalls).toBe(true)
+    expect(new Set(zone?.boundaryWallIds)).toEqual(new Set(walls.map((wall) => wall.id)))
+    expect(canonicalRing(zone!.polygon)).toEqual(canonicalRing(square))
+  })
+
+  test('names two identical rooms without collision', () => {
+    // Two rooms share the exact same polygon signature — both must still be
+    // created with distinct names instead of colliding on "Room 1".
+    const plan = planAutoZonesForLevel([squareSpace(), squareSpace()], [])
+
+    expect(plan.create).toHaveLength(2)
+    expect(new Set(plan.create.map((zone) => zone.name))).toEqual(new Set(['Room 1', 'Room 2']))
+  })
+
+  test('deletes an auto zone when its enclosing contour opens', () => {
+    const autoZone = ZoneNode.parse({
+      id: 'zone_auto_room',
+      name: 'Room 1',
+      polygon: square,
+      autoFromWalls: true,
+      boundaryWallIds: squareWalls().map((wall) => wall.id),
+      spaceRole: 'room',
+    })
+
+    const plan = planAutoZonesForLevel([], [autoZone])
+
+    expect(plan.delete).toEqual(['zone_auto_room'])
+    expect(plan.update).toHaveLength(0)
+    expect(plan.create).toHaveLength(0)
+  })
+
+  test('keeps a manual zone when its room disappears', () => {
+    const manualZone = ZoneNode.parse({
+      id: 'zone_manual',
+      name: 'Lawn',
+      polygon: square,
+    })
+
+    const plan = planAutoZonesForLevel([], [manualZone])
+
+    expect(plan.delete).toHaveLength(0)
+    expect(plan.update).toHaveLength(0)
+    expect(plan.create).toHaveLength(0)
+  })
+
+  test('matches two rooms to their own auto zones without churn', () => {
+    const wallsA = squareWalls()
+    const roomBPolygon: Array<[number, number]> = [
+      [10, 0],
+      [14, 0],
+      [14, 3],
+      [10, 3],
+    ]
+    const wallsB = [
+      WallNode.parse({ start: [10, 0], end: [14, 0] }),
+      WallNode.parse({ start: [14, 0], end: [14, 3] }),
+      WallNode.parse({ start: [14, 3], end: [10, 3] }),
+      WallNode.parse({ start: [10, 3], end: [10, 0] }),
+    ]
+    const zoneA = ZoneNode.parse({
+      id: 'zone_auto_a',
+      name: 'Room 1',
+      polygon: square,
+      autoFromWalls: true,
+      boundaryWallIds: wallsA.map((wall) => wall.id),
+    })
+    const zoneB = ZoneNode.parse({
+      id: 'zone_auto_b',
+      name: 'Room 2',
+      polygon: roomBPolygon,
+      autoFromWalls: true,
+      boundaryWallIds: wallsB.map((wall) => wall.id),
+    })
+
+    const plan = planAutoZonesForLevel(
+      [
+        ...detectSpacesForLevel('level-1', wallsA).spaces,
+        ...detectSpacesForLevel('level-1', wallsB).spaces,
+      ],
+      [zoneA, zoneB],
+    )
+
+    expect(plan.create).toHaveLength(0)
+    expect(plan.delete).toHaveLength(0)
+    expect(plan.update).toHaveLength(0)
+  })
+
+  test('walls closing a room materialize an auto zone through the live sync', () => {
+    const levelId = 'level_auto_zone_sync'
+    const walls = squareWalls().map((wall, index) =>
+      WallNode.parse({ ...wall, id: `wall_az_${index}`, parentId: levelId }),
+    )
+    const level = LevelNode.parse({
+      id: levelId,
+      level: 0,
+      children: walls.map((wall) => wall.id),
+    })
+    const sceneStore = createSceneStoreStub({})
+    const unsubscribe = initSpaceDetectionSync(sceneStore, createEditorStoreStub())
+
+    try {
+      runWithSceneCommitNodeIds([level.id, ...walls.map((wall) => wall.id)], () => {
+        sceneStore.setNodes(
+          Object.fromEntries([level, ...walls].map((node) => [node.id, node])) as Record<
+            string,
+            AnyNode
+          >,
+        )
+      })
+
+      const zoneIds = Object.values(sceneStore.getState().nodes)
+        .filter((node) => node.type === 'zone')
+        .map((node) => node.id)
+      expect(zoneIds).toHaveLength(1)
+      const zone = sceneStore.getState().nodes[zoneIds[0]!] as AnyNode
+      expect(zone).toMatchObject({
+        type: 'zone',
+        autoFromWalls: true,
+        spaceRole: 'room',
+      })
+      expect(new Set(zone.boundaryWallIds)).toEqual(new Set(walls.map((wall) => wall.id)))
+
+      // Opening the contour by removing one wall deletes the auto zone.
+      const { [walls[0]!.id]: _removed, ...withoutWall } = sceneStore.getState().nodes
+      runWithSceneCommitNodeIds([walls[0]!.id], () => sceneStore.setNodes(withoutWall))
+
+      const remainingZones = Object.values(sceneStore.getState().nodes).filter(
+        (node) => node.type === 'zone',
+      )
+      expect(remainingZones).toHaveLength(0)
+    } finally {
+      unsubscribe()
+    }
   })
 })
 

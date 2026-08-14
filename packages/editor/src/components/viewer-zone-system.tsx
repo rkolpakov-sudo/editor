@@ -27,11 +27,14 @@ export const ViewerZoneSystem = () => {
       const isOnSelectedLevel = zone.parentId === levelId
 
       // Keep group visible (so <Html> labels stay active), hide/show meshes only.
-      // Zone geometry: visible in zone mode on the right level, OR when this zone is selected.
-      // The editor ZoneSystem handles the selected zone's opacity animation.
+      // Zone geometry: visible in zone mode on the right level, OR when this zone
+      // is selected, OR when it is an architectural room (rooms are always shown,
+      // regardless of the structure layer). The editor ZoneSystem handles the
+      // selected zone's opacity animation.
       const isSelected = id === zoneId
+      const isRoomZone = zone.spaceRole === 'room' || zone.autoFromWalls === true
       const shouldShowGeometry =
-        (structureLayer === 'zones' && !!levelId && isOnSelectedLevel) || isSelected
+        ((structureLayer === 'zones' || isRoomZone) && !!levelId && isOnSelectedLevel) || isSelected
       if (!obj.visible) obj.visible = true
       obj.traverse((child) => {
         if ((child as Mesh).isMesh) {

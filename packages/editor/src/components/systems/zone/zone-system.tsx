@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect } from 'react'
 import { type Group, MathUtils, type Mesh } from 'three'
 import type { MeshBasicNodeMaterial } from 'three/webgpu'
+import { useShallow } from 'zustand/react/shallow'
 import { resolveOverlayPolicy } from '../../../lib/interaction/overlay-policy'
 import useEditor from '../../../store/use-editor'
 import useInteractionScope from '../../../store/use-interaction-scope'
@@ -12,8 +13,23 @@ import useInteractionScope from '../../../store/use-interaction-scope'
 // Zone selection in the editor is handled exclusively via the HTML label overlay.
 const noopRaycast = () => {}
 
+function isRoomZone(zone: ZoneNode | undefined) {
+  return zone?.spaceRole === 'room' || zone?.autoFromWalls === true
+}
+
 export const ZoneSystem = () => {
-  // Outside the zones layer (or during snapshot capture) zones unmount
+  // Rooms (architectural zones) stay mounted and visible in every structure
+  // layer; generic site zones (lawns, paving) remain behind the zones layer.
+  // The selector flips only when the set of room zones changes, so the effect
+  // re-runs exactly when an auto room is created or deleted by wall detection.
+  const hasRoomZones = useScene(
+    useShallow((state) =>
+      Object.values(state.nodes).some(
+        (node) => node.type === 'zone' && isRoomZone(node as ZoneNode),
+      ),
+    ),
+  )
+  // Outside the zones layer (or during snapshot capture) generic zones unmount
   // entirely — meshes AND drei <Html> labels, which cost per-frame matrix work
   // + live DOM even at opacity 0. The renderer reads this viewer flag; the
   // unmount cleanup restores the default so preview / first-person surfaces
@@ -21,9 +37,11 @@ export const ZoneSystem = () => {
   const structureLayerState = useEditor((s) => s.structureLayer)
   const isCaptureModeState = useEditor((s) => s.isCaptureMode)
   useEffect(() => {
-    useViewer.getState().setShowZones(structureLayerState === 'zones' && !isCaptureModeState)
+    useViewer
+      .getState()
+      .setShowZones((structureLayerState === 'zones' || hasRoomZones) && !isCaptureModeState)
     return () => useViewer.getState().setShowZones(true)
-  }, [structureLayerState, isCaptureModeState])
+  }, [structureLayerState, isCaptureModeState, hasRoomZones])
 
   useFrame((_, delta) => {
     if (!useViewer.getState().showZones) return
@@ -56,6 +74,10 @@ export const ZoneSystem = () => {
       const isOnSelectedLevel = zone?.parentId === selectedLevelId
       const isSelected = zoneId === selectedZoneId
       const isDeleteHovered = editorMode === 'delete' && hoveredId === zoneId
+
+      // Rooms render in every structure layer; generic site zones stay behind
+      // the zones layer.
+      const zoneGeometryVisible = structureLayer === 'zones' || isRoomZone(zone)
 
       // Keep group visible (so <Html> labels stay active), hide/show meshes only.
       // Show meshes when: in zone mode, selected, or delete-hovered.
@@ -101,9 +123,14 @@ export const ZoneSystem = () => {
       }
 
       // Labels: visible on the current level (regardless of mode), but never
-      // during snapshot capture.
+      // during snapshot capture, and only for rooms outside the zones layer —
+      // a generic site zone's floating tag is zones-mode chrome.
       const showLabel =
-        !isCaptureMode && !zoneLabelsHidden && !!selectedLevelId && isOnSelectedLevel
+        !isCaptureMode &&
+        !zoneLabelsHidden &&
+        !!selectedLevelId &&
+        isOnSelectedLevel &&
+        (structureLayer === 'zones' || isRoomZone(zone))
       const labelOpacity = showLabel ? '1' : '0'
       const labelEl = document.getElementById(`${zoneId}-label`)
       if (labelEl && labelEl.style.opacity !== labelOpacity) {
