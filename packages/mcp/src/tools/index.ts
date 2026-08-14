@@ -15,6 +15,7 @@ import { registerFindNodes } from './find-nodes'
 import { registerGetNode } from './get-node'
 import { registerGetScene } from './get-scene'
 import { registerMeasure } from './measure'
+import { registerMepExportTools } from './mep-export'
 import { registerPhotoToSceneTool } from './photo-to-scene'
 import { registerPlaceItem } from './place-item'
 import { registerRedo } from './redo'
@@ -56,6 +57,7 @@ export function registerTools(server: McpServer, operations: SceneOperations): v
   registerRedo(server, operations)
   registerExportJson(server, operations)
   registerExportGlb(server, operations)
+  registerMepExportTools(server, operations)
   registerValidateScene(server, operations)
   registerCheckCollisions(server, operations)
   registerTemplateTools(server, operations)

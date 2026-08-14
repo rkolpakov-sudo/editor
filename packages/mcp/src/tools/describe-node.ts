@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { resolveCeilingHeight } from '@pascal-app/core'
+import { planSystemMarkings, resolveCeilingHeight, systemMarkingLetter } from '@pascal-app/core'
 import type { AnyNode, AnyNodeId } from '@pascal-app/core/schema'
 import { z } from 'zod'
 import type { SceneOperations } from '../operations'
@@ -19,6 +19,27 @@ export const describeNodeOutput = {
   childrenIds: z.array(z.string()),
   properties: z.record(z.string(), z.unknown()),
   description: z.string(),
+}
+
+/** ГОСТ 21.602 marking (П1/В1/Р1) of the network a duct node belongs to. */
+function systemMarkingFor(bridge: SceneOperations, node: AnyNode): string {
+  const mark = planSystemMarkings(bridge.getNodes())[node.id as AnyNodeId]
+  if (mark) return mark
+  if (node.type === 'duct-segment' || node.type === 'duct-fitting') {
+    return systemMarkingLetter(node.system as 'supply' | 'exhaust' | 'return')
+  }
+  return '?'
+}
+
+/** Sum of the polyline legs of a duct path, m. */
+function segmentPathLengthM(path: ReadonlyArray<readonly [number, number, number]>): number {
+  let total = 0
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const a = path[i]!
+    const b = path[i + 1]!
+    total += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+  }
+  return total
 }
 
 /**
@@ -55,6 +76,22 @@ function describe(node: AnyNode, bridge: SceneOperations): string {
     case 'item': {
       const [x, y, z] = node.position
       return `Item "${node.asset.name}" at (${x},${y},${z})`
+    }
+    case 'duct-segment': {
+      const mark = systemMarkingFor(bridge, node)
+      const length = segmentPathLengthM(node.path)
+      const size =
+        node.shape === 'round'
+          ? `Ø${node.diameter} мм`
+          : `${node.width}×${node.height} мм (${node.shape})`
+      return `Duct ${size} (${node.shape}) on ${mark} system, ${length.toFixed(2)} m`
+    }
+    case 'duct-fitting': {
+      const mark = systemMarkingFor(bridge, node)
+      return `Duct fitting ${node.fittingType} ${node.shape === 'round' ? `Ø${node.diameter} мм` : `${node.width}×${node.height} мм`} on ${mark} system`
+    }
+    case 'duct-terminal': {
+      return `Duct terminal ${node.terminalType} (${node.mount}, collar Ø${node.collarDiameter}" )`
     }
     default:
       return `${node.type} node`

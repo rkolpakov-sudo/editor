@@ -64,14 +64,17 @@ Invoke the `review-architecture` skill (`.agents/skills/review-architecture/SKIL
 - Авто-зоны помещений — автоматически из замкнутых контуров стен, удаляются при размыкании, видны по умолчанию.
 - Расчётный движок и правила — в `packages/core` (чистая логика, без Three.js); UI — в `packages/editor`/`apps/editor`.
 
-Статус: **Этапы 0–4 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
+Статус: **Этапы 0–6 выполнены** (справочник + план в `docs/mep/`; миграция единиц дюймы→мм + ГОСТ-ряд,
 коммиты `19224724`, `7f1aede5`, `31a7060f`; авто-зоны помещений: create/update/delete из замкнутых контуров,
 room-зоны видны без слоя zones, `zone.ts` получил `spaceCategory`; расчётный движок `packages/core/src/mep/`:
 constants, norms-types, aerodynamics, sizing, routing-rules, duct-network, bypass — 70 тестов; schema:
 `system: 'supply'|'exhaust'|'return'`, `fittingType:'offset'` (утка) + `offset`/`offsetRadiusFactor`; сервис
 автообвода `packages/core/src/mep/bypass.ts`: детекция П/В, геометрия S 45/90 (R=1.5D), зазор ≥50 мм,
-split сегмента + фиттинг утка, пересчёт ΔP/Σξ/подбор по ГОСТ; фиттинг утка рендерится в nodes).
-Следующий — Этап 5 (UI: панель «Вентиляция», маркировка П1/В1, инспекторы, кнопка «Автообвод»).
+split сегмента + фиттинг утка, пересчёт ΔP/Σξ/подбор по ГОСТ; фиттинг утка рендерится в nodes; UI:
+панель «Вентиляция», маркировка П1/В1, инспекторы, «Автообвод»; экспорт: спецификация
+`packages/core/src/mep/specification.ts` (ведомость по ГОСТ, CSV), план DXF `packages/core/src/mep/dxf.ts`
+(слои П/В/Р, маркировка), MCP `mep_specification`/`mep_dxf`, `describe_node` для duct).
+Следующий — Этап 7 (unit/integration-тесты: план → зоны → трассы П/В → пересечение → автообвод → расчёт → спецификация).
 Архитектурно-чувствительные
 изменения (новая схема/система/инструмент) — сначала читать `wiki/architecture/` по правилам ниже.
 

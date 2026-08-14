@@ -2,12 +2,15 @@
 
 import {
   buildDuctNetworks,
+  buildDuctSpecification,
+  ductsToDxf,
   planAllBypasses,
   planSystemMarkings,
+  specificationToCsv,
   useScene,
   validateDuctNetwork,
 } from '@pascal-app/core'
-import { AlertTriangle, Check, Wind, X } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardList, Download, Wind, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { applyAllBypasses, type BypassApplyReport } from '../../lib/mep-actions'
 import { cn } from '../../lib/utils'
@@ -57,11 +60,16 @@ function VentilationContent() {
   const setVentilationOpen = useEditor((s) => s.setVentilationOpen)
   const nodes = useScene((s) => s.nodes)
   const [report, setReport] = useState<BypassApplyReport | null>(null)
+  const [showSpec, setShowSpec] = useState(false)
 
   const networks = useMemo(() => buildDuctNetworks(nodes), [nodes])
   const markings = useMemo(() => planSystemMarkings(nodes), [nodes])
   const bypass = useMemo(() => planAllBypasses(nodes), [nodes])
   const findings = useMemo(() => validateDuctNetwork(nodes), [nodes])
+  const specification = useMemo(
+    () => buildDuctSpecification(nodes, { markings }),
+    [nodes, markings],
+  )
 
   const hasDucts = networks.length > 0
   const hasCrossings = bypass.plans.length + bypass.skipped.length > 0
@@ -70,6 +78,31 @@ function VentilationContent() {
   const handleAutoBypass = () => {
     const next = applyAllBypasses()
     setReport(next)
+  }
+
+  const handleDownload = (filename: string, content: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportCsv = () => {
+    handleDownload(
+      `specification_${new Date().toISOString().split('T')[0]}.csv`,
+      specificationToCsv(specification),
+      'text/csv;charset=utf-8',
+    )
+  }
+
+  const handleExportDxf = () => {
+    handleDownload(
+      `ventilation_plan_${new Date().toISOString().split('T')[0]}.dxf`,
+      ductsToDxf(nodes, { markings }),
+      'application/dxf',
+    )
   }
 
   return (
@@ -262,6 +295,158 @@ function VentilationContent() {
                 )}
               </div>
             )}
+
+            <div className="rounded-xl border border-border/45 bg-background/75">
+              <div className="flex items-center gap-2 px-2.5 py-2">
+                <ClipboardList className="h-3.5 w-3.5 text-muted-foreground" />
+                <button
+                  className="flex-1 text-left font-medium text-xs"
+                  onClick={() => setShowSpec((v) => !v)}
+                  type="button"
+                >
+                  Спецификация
+                </button>
+                {showSpec && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      className="flex items-center gap-1 rounded-md border border-border/40 bg-background/60 px-1.5 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={handleExportCsv}
+                      title="Скачать ведомость CSV"
+                      type="button"
+                    >
+                      <Download className="h-3 w-3" /> CSV
+                    </button>
+                    <button
+                      className="flex items-center gap-1 rounded-md border border-border/40 bg-background/60 px-1.5 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={handleExportDxf}
+                      title="Скачать план вентиляции DXF (П/В)"
+                      type="button"
+                    >
+                      <Download className="h-3 w-3" /> DXF
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {showSpec && (
+                <div className="max-h-48 overflow-y-auto border-t border-border/40">
+                  <table className="w-full text-left text-[10px]">
+                    <thead className="sticky top-0 bg-background/95 text-muted-foreground">
+                      <tr className="border-b border-border/40">
+                        <th className="px-2 py-1 font-medium">Поз.</th>
+                        <th className="px-2 py-1 font-medium">Наименование</th>
+                        <th className="px-2 py-1 font-medium">С</th>
+                        <th className="px-2 py-1 text-right font-medium">Ед.</th>
+                        <th className="px-2 py-1 text-right font-medium">Кол-во</th>
+                        <th className="px-2 py-1 text-right font-medium">Длина, м</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {specification.sections.ducts.map((row) => (
+                        <tr className="border-b border-border/30" key={`d${row.pos}`}>
+                          <td className="px-2 py-1 text-muted-foreground">{row.pos}</td>
+                          <td className="px-2 py-1" title={row.note}>
+                            {row.name}
+                          </td>
+                          <td className="px-2 py-1">
+                            {row.system ? (
+                              <span
+                                className="font-mono font-semibold"
+                                style={{ color: SYSTEM_META[row.system]?.color }}
+                              >
+                                {SYSTEM_META[row.system]!.letter}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="px-2 py-1 text-right text-muted-foreground">{row.unit}</td>
+                          <td className="px-2 py-1 text-right font-mono">{row.quantity}</td>
+                          <td className="px-2 py-1 text-right font-mono">
+                            {row.lengthM !== undefined ? row.lengthM.toFixed(2) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {specification.sections.fittings.map((row) => (
+                        <tr className="border-b border-border/30" key={`f${row.pos}`}>
+                          <td className="px-2 py-1 text-muted-foreground">{row.pos}</td>
+                          <td className="px-2 py-1">{row.name}</td>
+                          <td className="px-2 py-1">—</td>
+                          <td className="px-2 py-1 text-right text-muted-foreground">{row.unit}</td>
+                          <td className="px-2 py-1 text-right font-mono">{row.quantity}</td>
+                          <td className="px-2 py-1 text-right font-mono">—</td>
+                        </tr>
+                      ))}
+                      {specification.sections.terminals.map((row) => (
+                        <tr className="border-b border-border/30" key={`t${row.pos}`}>
+                          <td className="px-2 py-1 text-muted-foreground">{row.pos}</td>
+                          <td className="px-2 py-1">{row.name}</td>
+                          <td className="px-2 py-1">—</td>
+                          <td className="px-2 py-1 text-right text-muted-foreground">{row.unit}</td>
+                          <td className="px-2 py-1 text-right font-mono">{row.quantity}</td>
+                          <td className="px-2 py-1 text-right font-mono">—</td>
+                        </tr>
+                      ))}
+                      {specification.sections.hardware.map((row) => (
+                        <tr className="border-b border-border/30" key={`h${row.pos}`}>
+                          <td className="px-2 py-1 text-muted-foreground">{row.pos}</td>
+                          <td className="px-2 py-1">{row.name}</td>
+                          <td className="px-2 py-1">—</td>
+                          <td className="px-2 py-1 text-right text-muted-foreground">{row.unit}</td>
+                          <td className="px-2 py-1 text-right font-mono">{row.quantity}</td>
+                          <td className="px-2 py-1 text-right font-mono">—</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border/40 bg-background/60 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+                    <span>
+                      Длина:{' '}
+                      <span className="font-mono text-foreground">
+                        {specification.totals.lengthM.toFixed(1)} м
+                      </span>
+                    </span>
+                    <span>
+                      Сталь:{' '}
+                      <span className="font-mono text-foreground">
+                        {specification.totals.sheetAreaM2.toFixed(1)} м²
+                      </span>
+                    </span>
+                    <span>
+                      Масса:{' '}
+                      <span className="font-mono text-foreground">
+                        {specification.totals.massKg.toFixed(1)} кг
+                      </span>
+                    </span>
+                    <span>
+                      Крепления:{' '}
+                      <span className="font-mono text-foreground">
+                        {specification.totals.supports}
+                      </span>
+                    </span>
+                    <span>
+                      Гильзы:{' '}
+                      <span className="font-mono text-foreground">
+                        {specification.totals.sleeves}
+                      </span>
+                    </span>
+                  </div>
+                  {specification.warnings.length > 0 && (
+                    <div className="space-y-1 px-2.5 py-1.5">
+                      {specification.warnings.map((warning, index) => (
+                        <p
+                          className="flex items-start gap-1.5 text-[10px] text-amber-200"
+                          key={index}
+                        >
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                          {warning}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

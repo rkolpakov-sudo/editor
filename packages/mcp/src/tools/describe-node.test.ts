@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { WallNode } from '@pascal-app/core/schema'
+import { DuctSegmentNode, WallNode } from '@pascal-app/core/schema'
 import { SceneBridge } from '../bridge/scene-bridge'
 import { registerDescribeNode } from './describe-node'
 
@@ -60,5 +60,30 @@ describe('describe_node', () => {
       arguments: { id: 'wall_nope' },
     })
     expect(result.isError).toBe(true)
+  })
+
+  test('describes a duct segment with system marking and length', async () => {
+    const level = Object.values(bridge.getNodes()).find((n) => n.type === 'level')!
+    const segment = DuctSegmentNode.parse({
+      path: [
+        [0, 2.6, 0],
+        [2.5, 2.6, 0],
+      ],
+      system: 'supply',
+      diameter: 160,
+    })
+    bridge.createNode(segment, level.id)
+
+    const result = await client.callTool({
+      name: 'describe_node',
+      arguments: { id: segment.id },
+    })
+    expect(result.isError).toBeFalsy()
+    const parsed = JSON.parse((result.content as Array<{ type: string; text: string }>)[0]!.text)
+    expect(parsed.type).toBe('duct-segment')
+    expect(parsed.description).toContain('Ø160 мм')
+    expect(parsed.description).toContain('2.50 m')
+    // П1 with the duct registry wired; П (letter) fallback otherwise.
+    expect(parsed.description).toContain('on П')
   })
 })
