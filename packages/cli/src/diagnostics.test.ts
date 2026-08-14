@@ -21,6 +21,9 @@ test('doctor reports corrupt managed state instead of crashing', async () => {
 })
 
 test('info creates private local storage on a fresh home', async () => {
+  // POSIX permission bits (mode & 0o077) are meaningless on Windows — the
+  // mode read back from stat() does not reflect the mkdir mode argument.
+  if (process.platform === 'win32') return
   const root = await mkdtemp(path.join(os.tmpdir(), 'pascal-cli-info-'))
   try {
     const paths = resolvePascalPaths({ PASCAL_HOME: path.join(root, 'home') })

@@ -689,7 +689,6 @@ async function matchesRecordedEditorProcess(
   paths: PascalPaths,
   state: EditorState,
 ): Promise<boolean> {
-  if (process.platform === 'win32') return false
   const runtimeDirectory = path.resolve(state.runtimeDirectory)
   if (!runtimeDirectory.startsWith(`${path.resolve(paths.runtime)}${path.sep}`)) return false
   let expectedEntrypoint: string
@@ -704,7 +703,7 @@ async function matchesRecordedEditorProcess(
 }
 
 async function matchesRecordedMcpProcess(paths: PascalPaths, state: EditorState): Promise<boolean> {
-  if (process.platform === 'win32' || !state.mcp) return false
+  if (!state.mcp) return false
   const runtimeDirectory = path.resolve(state.runtimeDirectory)
   if (!runtimeDirectory.startsWith(`${path.resolve(paths.runtime)}${path.sep}`)) return false
   let expectedEntrypoint: string
@@ -718,6 +717,23 @@ async function matchesRecordedMcpProcess(paths: PascalPaths, state: EditorState)
 }
 
 async function processCommand(pid: number): Promise<string> {
+  if (process.platform === 'win32') {
+    return new Promise((resolve) => {
+      execFile(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`,
+        ],
+        { windowsHide: true },
+        (error, stdout) => {
+          resolve(error ? '' : stdout.trim())
+        },
+      )
+    })
+  }
   return new Promise((resolve) => {
     execFile('ps', ['-ww', '-p', String(pid), '-o', 'command='], (error, stdout) => {
       resolve(error ? '' : stdout.trim())
