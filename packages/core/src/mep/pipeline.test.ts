@@ -20,7 +20,8 @@ import {
 } from './bypass'
 import { resolveRequiredAirflowM3h } from './constants'
 import { registerDuctNetworkStubs } from './duct-network-stubs'
-import { ductSegmentLengthM } from './gost-segmentation'
+import { ductsToDxf } from './dxf'
+import { ductSegmentLengthM, planSystemMarkings } from './gost-segmentation'
 import { computeNetworkFlows } from './network-flows'
 import { computeNetworkPressure } from './network-pressure'
 import { sizeDuctNetworks, sizedProfiles } from './network-sizing'
@@ -430,5 +431,128 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     const exhaustTotal = exhaustSegments.reduce((sum, node) => sum + ductSegmentLengthM(node), 0)
     expect(exhaustTotal).toBeLessThan(12)
     expect(exhaustTotal).toBeGreaterThan(8)
+  })
+
+  test('Этап 12: комната → зона → расход 90 → трассы П/В → утка → сетевой подбор → спецификация v2 → DXF v2', () => {
+    registerDuctNetworkStubs()
+
+    // 1) Комната (кухня) → авто-зона → категория → расход 90 вытяжки.
+    const walls = roomWalls()
+    const { spaces } = detectSpacesForLevel('level-1', walls)
+    expect(spaces).toHaveLength(1)
+    const zonePlan = planAutoZonesForLevel(spaces, [])
+    const zone = ZoneNode.parse({ ...zonePlan.create[0]!, spaceCategory: 'kitchen_gas' })
+    const [airflow] = computeZoneAirflows([zone])
+    expect(airflow!.requiredFlowM3h).toBe(90)
+    expect(airflow!.direction).toBe('exhaust')
+
+    // 2) Вытяжная сеть кухни: установка → seg1 → seg2 → вытяжная решётка.
+    const equipment = HvacEquipmentNode.parse({
+      id: 'hvac-equipment_fan',
+      position: [2, 2.6, -1],
+      equipmentType: 'furnace',
+    } as AnyNode)
+    const exh1 = segment(
+      [
+        [2, 2.6, -1],
+        [2, 2.6, 1],
+      ],
+      { id: 'duct-segment_exh1', system: 'exhaust', diameter: 160 },
+    )
+    const exh2 = segment(
+      [
+        [2, 2.6, 1],
+        [2, 2.6, 5],
+      ],
+      { id: 'duct-segment_exh2', system: 'exhaust', diameter: 160 },
+    )
+    const grille = DuctTerminalNode.parse({
+      id: 'duct-terminal_grille',
+      position: [2, 2.6, 5],
+      terminalType: 'return-grille',
+    } as AnyNode)
+
+    // 3) Приток П1 пересекает вытяжку В1 на z=2 (диаметр 400 → смещение 500).
+    const supply = segment(
+      [
+        [-1, 2.6, 2],
+        [7, 2.6, 2],
+      ],
+      { id: 'duct-segment_supply', system: 'supply', diameter: 400 },
+    )
+    const scene = sceneOf(zone, equipment, exh1, exh2, grille, supply)
+    expect(detectBypassCrossings(scene)).toHaveLength(1)
+
+    // 4) Утка: пересечение планируется и применяется (вытяжка огибает приток).
+    const run = planAllBypassRuns(scene)[0]!
+    expect(run.bypasses).toHaveLength(1)
+    expect(run.bypasses[0]!.offsetMm).toBe(400 + 2 * 50)
+    const next: Record<AnyNodeId, AnyNode> = { ...scene }
+    const mutations = buildBypassRunMutations(run, exh2)
+    next[exh2.id] = { ...exh2, path: mutations.beforePath } as DuctSegmentNode
+    for (const piece of [...mutations.intermediateSegments, mutations.afterSegment]) {
+      next[piece.id] = piece
+    }
+    for (const fitting of mutations.fittings) next[fitting.id] = fitting
+    expect(detectBypassCrossings(next)).toHaveLength(0)
+
+    // 5) Зона → терминал → расход 90 по всей вытяжной сети (после обвода).
+    const assignments = assignZoneAirflowsToTerminals(next, [zone])
+    expect(assignments).toHaveLength(1)
+    expect(assignments[0]!.terminalId).toBe(grille.id)
+    const flows = computeNetworkFlows(next, { terminalFlows: terminalFlowMap(assignments) })
+    const exhaustFlow = flows.find((flow) => flow.systems.includes('exhaust'))!
+    expect(exhaustFlow).toBeDefined()
+    expect(exhaustFlow.totalFlowM3h).toBe(90)
+    for (const id of [exh1.id, exh2.id, mutations.afterSegment.id]) {
+      expect(exhaustFlow.segmentFlows[id]).toBeCloseTo(90, 9)
+    }
+
+    // 6) Сетевой подбор (Этап 8): каждый участок вытяжки → Ø100 по ГОСТ (Л.1).
+    const sizing = sizeDuctNetworks(next, { flows })
+    const exhaustSizing = sizing.find((result) => result.systems.includes('exhaust'))!
+    expect(exhaustSizing).toBeDefined()
+    for (const segment of exhaustSizing.segments) {
+      expect(segment.flowM3h).toBeCloseTo(90, 9)
+      expect(segment.profile).toEqual({ shape: 'round', diameterMm: 100 })
+      expect(segment.inNormBand).toBe(true)
+      expect(segment.frictionDropPa).toBeGreaterThan(0)
+    }
+
+    // 7) Потери по сети (по подобранным сечениям): критический путь ΔP > 0.
+    const pressure = computeNetworkPressure(next, {
+      flows,
+      profiles: sizedProfiles(sizing),
+    })
+    const exhaustPressure = pressure.find((result) => result.systems.includes('exhaust'))!
+    expect(exhaustPressure).toBeDefined()
+    expect(exhaustPressure.criticalPath).not.toBeNull()
+    expect(exhaustPressure.totalPressurePa).toBeGreaterThan(0)
+
+    // 8) Спецификация v2: маркировка П1/В1, утка, расход/подбор в строке.
+    const markings = planSystemMarkings(next)
+    const spec = buildDuctSpecification(next, { walls, markings, sizing })
+    const supplyRow = spec.systems.find((row) => row.system === 'supply')!
+    const exhaustRow = spec.systems.find((row) => row.system === 'exhaust')!
+    expect(supplyRow.marking).toBe('П1')
+    expect(exhaustRow.marking).toBe('В1')
+    const utka = spec.sections.fittings.find((row) => row.name.includes('Утка'))
+    expect(utka).toBeDefined()
+    expect(utka!.quantity).toBe(1)
+    const exhaustDuctRow = spec.sections.ducts.find(
+      (row) => row.system === 'exhaust' && row.flowM3h !== undefined,
+    )!
+    expect(exhaustDuctRow.flowM3h).toBeGreaterThan(0)
+    expect(exhaustDuctRow.sizedLabel).toContain('Ø100')
+    expect(exhaustDuctRow.note).toContain('ΔP')
+    expect(spec.totals.sleeves).toBe(4)
+
+    // 9) DXF v2: маркировка на плане, утка по типу, легенда систем, гильзы.
+    const dxf = ductsToDxf(next, { walls, markings })
+    expect(dxf).toContain('П1')
+    expect(dxf).toContain('В1')
+    expect(dxf).toContain('Утка')
+    expect(dxf).toContain('Системы')
+    expect(dxf).toContain('MEP_SLEEVE')
   })
 })
