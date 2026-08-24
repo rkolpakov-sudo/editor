@@ -12,6 +12,7 @@ import { dormerDefinition } from './dormer'
 import { downspoutDefinition } from './downspout'
 import { ductFittingDefinition } from './duct-fitting'
 import { ductSegmentDefinition } from './duct-segment'
+import { ductSketchDefinition } from './duct-sketch'
 import { ductTerminalDefinition } from './duct-terminal'
 import { elevatorDefinition } from './elevator'
 import { eyebrowVentDefinition } from './eyebrow-vent'
@@ -110,6 +111,7 @@ export const builtinPlugin: Plugin = {
     ductSegmentDefinition as unknown as AnyNodeDefinition,
     ductFittingDefinition as unknown as AnyNodeDefinition,
     ductTerminalDefinition as unknown as AnyNodeDefinition,
+    ductSketchDefinition as unknown as AnyNodeDefinition,
     hvacEquipmentDefinition as unknown as AnyNodeDefinition,
     linesetDefinition as unknown as AnyNodeDefinition,
     liquidLineDefinition as unknown as AnyNodeDefinition,
@@ -141,6 +143,7 @@ export { dormerDefinition } from './dormer'
 export { downspoutDefinition } from './downspout'
 export { ductFittingDefinition } from './duct-fitting'
 export { ductSegmentDefinition } from './duct-segment'
+export { ductSketchDefinition } from './duct-sketch'
 export { ductTerminalDefinition } from './duct-terminal'
 export { elevatorDefinition } from './elevator'
 export { eyebrowVentDefinition } from './eyebrow-vent'

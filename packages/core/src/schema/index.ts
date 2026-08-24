@@ -89,6 +89,12 @@ export {
 export { DownspoutNode } from './nodes/downspout'
 export { DuctFittingNode } from './nodes/duct-fitting'
 export { DuctSegmentNode } from './nodes/duct-segment'
+export {
+  DuctSketchElevation,
+  DuctSketchNode,
+  DuctSketchPoint,
+  DuctSketchRun,
+} from './nodes/duct-sketch'
 export { DuctTerminalNode } from './nodes/duct-terminal'
 export {
   ElevatorDoorPanelStyle,

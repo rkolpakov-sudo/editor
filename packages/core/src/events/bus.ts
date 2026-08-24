@@ -16,6 +16,7 @@ import type {
   DownspoutNode,
   DuctFittingNode,
   DuctSegmentNode,
+  DuctSketchNode,
   DuctTerminalNode,
   ElevatorNode,
   EyebrowVentNode,
@@ -128,6 +129,7 @@ export type DownspoutEvent = NodeEvent<DownspoutNode>
 export type DuctSegmentEvent = NodeEvent<DuctSegmentNode>
 export type DuctFittingEvent = NodeEvent<DuctFittingNode>
 export type DuctTerminalEvent = NodeEvent<DuctTerminalNode>
+export type DuctSketchEvent = NodeEvent<DuctSketchNode>
 export type HvacEquipmentEvent = NodeEvent<HvacEquipmentNode>
 export type PipeSegmentEvent = NodeEvent<PipeSegmentNode>
 export type PipeFittingEvent = NodeEvent<PipeFittingNode>
@@ -328,6 +330,7 @@ type EditorEvents = GridEvents &
   NodeEvents<'duct-segment', DuctSegmentEvent> &
   NodeEvents<'duct-fitting', DuctFittingEvent> &
   NodeEvents<'duct-terminal', DuctTerminalEvent> &
+  NodeEvents<'duct-sketch', DuctSketchEvent> &
   NodeEvents<'hvac-equipment', HvacEquipmentEvent> &
   NodeEvents<'pipe-segment', PipeSegmentEvent> &
   NodeEvents<'pipe-fitting', PipeFittingEvent> &

@@ -12,6 +12,7 @@ import { DormerNode } from './nodes/dormer'
 import { DownspoutNode } from './nodes/downspout'
 import { DuctFittingNode } from './nodes/duct-fitting'
 import { DuctSegmentNode } from './nodes/duct-segment'
+import { DuctSketchNode } from './nodes/duct-sketch'
 import { DuctTerminalNode } from './nodes/duct-terminal'
 import { ElevatorNode } from './nodes/elevator'
 import { EyebrowVentNode } from './nodes/eyebrow-vent'
@@ -86,6 +87,7 @@ export const AnyNode = z.discriminatedUnion('type', [
   DuctSegmentNode,
   DuctFittingNode,
   DuctTerminalNode,
+  DuctSketchNode,
   HvacEquipmentNode,
   LinesetNode,
   LiquidLineNode,
