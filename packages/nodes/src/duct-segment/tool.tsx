@@ -41,6 +41,7 @@ import {
   Vector3,
 } from 'three'
 import { getDuctFittingPorts } from '../duct-fitting/ports'
+import { appendSketchPoint, finalizeSketchRun, planSketchCommit } from '../duct-sketch/sketch-draft'
 import {
   planCrossAtRunBody,
   planElbowAtPort,
@@ -131,6 +132,23 @@ const ALT_Y_MAX_M = 10
  *  ring + vertical line recolour to this while the point is snapped onto an
  *  existing run, so the coincidence reads with the familiar snap green. */
 const SNAP_CURSOR_COLOR = '#22c55e'
+
+/** Sketch-mode line / badge tint per air loop — same palette as the 2D
+ *  plan's dashed sketch rendering, so intent reads identically in both. */
+const SKETCH_SYSTEM_COLORS: Record<DraftProfile['system'], string> = {
+  supply: '#d4825a',
+  exhaust: '#5ab46a',
+  return: '#5a8ad4',
+}
+const SKETCH_SYSTEM_LABELS: Record<DraftProfile['system'], string> = {
+  supply: 'П (приток)',
+  exhaust: 'В (вытяжка)',
+  return: 'Р (рециркуляция)',
+}
+/** Sketch/build preference survives tool switches within a session — the
+ *  MEP operator drafting several sketch polylines in a row shouldn't have
+ *  to hit K again after peeking at a panel. */
+let sketchModePreferred = false
 
 function snap(value: number, step: number): number {
   if (step <= 0) return value
@@ -543,6 +561,14 @@ const DuctSegmentTool = () => {
   })
   const [draftPoints, setDraftPoints] = useState<Array<[number, number, number]>>([])
   const [cursorPos, setCursorPos] = useState<[number, number, number] | null>(null)
+  // Sketch mode (PLAN-AGENT Этап A2): clicks accumulate an intent polyline
+  // that lands in the level's DuctSketchNode on Enter / double-click,
+  // instead of committing real duct segments per click. Toggled with K.
+  // The air loop cycles with the same S key; sections / fittings / ceiling
+  // routing don't apply — the agent picks those at «Трассировка».
+  const [mode, setMode] = useState<'build' | 'sketch'>(() =>
+    sketchModePreferred ? 'sketch' : 'build',
+  )
   // Ceiling routing mode (default ON — СП 60/СП 73: воздуховоды прокладываются
   // под потолком/перекрытием, а не по полу; toggle with C to lay on the floor
   // for risers or special runs): every point lands just below the ceiling or
@@ -571,6 +597,8 @@ const DuctSegmentTool = () => {
   // setState) read the latest values without re-subscribing.
   const draftRef = useRef(draftPoints)
   draftRef.current = draftPoints
+  const modeRef = useRef(mode)
+  modeRef.current = mode
   const cursorPosRef = useRef(cursorPos)
   cursorPosRef.current = cursorPos
   const profileRef = useRef(profile)
@@ -592,7 +620,7 @@ const DuctSegmentTool = () => {
 
   const ghostFittings = useMemo(() => {
     const last = draftPoints.at(-1)
-    if (!(activeLevelId && last && cursorPos) || altActive) return []
+    if (!(activeLevelId && last && cursorPos) || altActive || mode === 'sketch') return []
     const fittings =
       planDuctDraw(
         last,
@@ -610,14 +638,35 @@ const DuctSegmentTool = () => {
         parentId: activeLevelId,
       }),
     )
-  }, [activeLevelId, altActive, cursorPos, draftPoints, endSnap, profile])
+  }, [activeLevelId, altActive, cursorPos, draftPoints, endSnap, mode, profile])
 
   useEffect(() => {
+    // The path-draft preview store is the committed-run visual contract
+    // (body + centerline). Sketch intent is dashed plan-only chrome, so it
+    // must never publish there — clear whatever a prior build draft left.
+    if (mode === 'sketch') {
+      usePathDraftPreview.getState().clear('duct-segment')
+      return
+    }
     usePathDraftPreview
       .getState()
       .setDraft('duct-segment', draftPoints, cursorPos, profile, ghostFittings)
-  }, [cursorPos, draftPoints, ghostFittings, profile])
+  }, [cursorPos, draftPoints, ghostFittings, mode, profile])
   useEffect(() => () => usePathDraftPreview.getState().clear('duct-segment'), [])
+
+  useEffect(() => {
+    // An in-flight draft belongs to the level it started on: a level switch
+    // must never carry points across (a sketch commit lands in whatever
+    // level is active at Enter).
+    if (!activeLevelId) return
+    setDraftPoints([])
+    setCursorPos(null)
+    setSnapTarget(null)
+    setEndSnap({ port: null, body: null })
+    setHoverCeiling(null)
+    startPortRef.current = null
+    startBodyRef.current = null
+  }, [activeLevelId])
 
   useEffect(() => {
     if (!activeLevelId) return
@@ -829,9 +878,74 @@ const DuctSegmentTool = () => {
       setHoverCeiling(getCeilingAt(activeLevelId, useScene.getState().nodes, x, z))
     }
 
+    // ── Sketch mode (PLAN-AGENT Этап A2) ──
+    // Freehand plan polyline: grid snap + 45° angle lock, no port / body
+    // mating and no ceiling logic — the sketch is intent, not geometry.
+    const resolveSketchPoint = (event: GridEvent): [number, number, number] => {
+      const last = draftRef.current.at(-1)
+      const step = isGridSnapActive() ? useEditor.getState().gridSnapStep : 0
+      const raw: [number, number, number] = [event.localPosition[0], 0, event.localPosition[2]]
+      const angled = last && isAngleSnapActive() ? projectToAngleLock(last, raw) : raw
+      return [snap(angled[0], step), 0, snap(angled[2], step)]
+    }
+
+    // Land the in-flight polyline as a run of the level's DuctSketchNode
+    // (minting the node on first finish). One applyNodeChanges call → one
+    // undo step per finished polyline.
+    const commitSketchRun = () => {
+      const run = finalizeSketchRun(profileRef.current.system, draftRef.current)
+      if (!run || !activeLevelId) return
+      const change = planSketchCommit(useScene.getState().nodes, activeLevelId, run)
+      useScene.getState().applyNodeChanges(
+        change.create
+          ? {
+              create: [{ node: change.create.node, parentId: change.create.parentId }],
+              update: [],
+            }
+          : { create: [], update: [{ id: change.update.id, data: change.update.data }] },
+      )
+      triggerSFX('sfx:item-place')
+      setDraftPoints([])
+      setCursorPos(null)
+    }
+
+    const cycleSystem = () => {
+      // П → В → Р → П (ГОСТ 21.602); shared by build and sketch modes.
+      const cycle: DraftProfile['system'][] = ['supply', 'exhaust', 'return']
+      setProfile((p) => ({
+        ...p,
+        system: cycle[(cycle.indexOf(p.system) + 1) % cycle.length]!,
+      }))
+      triggerSFX('sfx:grid-snap')
+    }
+
+    const switchMode = () => {
+      // Build ↔ sketch. An in-flight draft belongs to its mode's semantics,
+      // so switching always clears it.
+      setDraftPoints([])
+      setCursorPos(null)
+      setSnapTarget(null)
+      setEndSnap({ port: null, body: null })
+      setHoverCeiling(null)
+      startPortRef.current = null
+      startBodyRef.current = null
+      altAnchorRef.current = null
+      setAltActive(false)
+      setMode((m) => {
+        const next = m === 'build' ? 'sketch' : 'build'
+        sketchModePreferred = next === 'sketch'
+        return next
+      })
+      triggerSFX('sfx:grid-snap')
+    }
+
     const onMove = (event: GridEvent) => {
       const clientY = (event.nativeEvent as { clientY?: number } | undefined)?.clientY
       if (typeof clientY === 'number') lastClientYRef.current = clientY
+      if (modeRef.current === 'sketch') {
+        setCursorPos(resolveSketchPoint(event))
+        return
+      }
       // Alt vertical mode wins over the XZ logic.
       if (altAnchorRef.current && typeof clientY === 'number') {
         const point = resolveAltVerticalPoint(clientY)
@@ -852,6 +966,14 @@ const DuctSegmentTool = () => {
     }
 
     const onClick = (event: GridEvent) => {
+      if (modeRef.current === 'sketch') {
+        const point = resolveSketchPoint(event)
+        const next = appendSketchPoint(draftRef.current, point)
+        if (next !== draftRef.current) triggerSFX('sfx:grid-snap')
+        setDraftPoints(next)
+        setCursorPos(point)
+        return
+      }
       const start = draftRef.current.at(-1)
       // Vertical mode with a start anchored: the click commits the riser
       // segment right there. Never falls through to the XZ logic — a
@@ -921,6 +1043,24 @@ const DuctSegmentTool = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (modeRef.current === 'sketch') {
+        // Sketch-mode keys only: S cycles the air loop, Enter finishes the
+        // polyline, K leaves. Alt vertical, section, diameter and ceiling
+        // keys are build-only. Escape is NOT handled here — the shared
+        // `tool:cancel` → `onCancel` path drops the draft AND, when the
+        // draft is already empty, falls through so Esc exits to select.
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault()
+          cycleSystem()
+        } else if (e.key === 'Enter') {
+          e.preventDefault()
+          commitSketchRun()
+        } else if (e.key === 'k' || e.key === 'K') {
+          e.preventDefault()
+          switchMode()
+        }
+        return
+      }
       if (e.key === 'Alt') {
         e.preventDefault()
         enterAltMode()
@@ -940,12 +1080,10 @@ const DuctSegmentTool = () => {
         // run to В before crossing П keeps the two networks separate for
         // the МЭП bypass (утка) to detect the crossing.
         e.preventDefault()
-        const cycle: DraftProfile['system'][] = ['supply', 'exhaust', 'return']
-        setProfile((p) => ({
-          ...p,
-          system: cycle[(cycle.indexOf(p.system) + 1) % cycle.length]!,
-        }))
-        triggerSFX('sfx:grid-snap')
+        cycleSystem()
+      } else if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        switchMode()
       } else if (e.key === 'c' || e.key === 'C') {
         // Toggle ceiling routing: default ON hangs runs under the ceiling /
         // slab (normative), C switches to floor placement for risers or
@@ -980,14 +1118,22 @@ const DuctSegmentTool = () => {
       startBodyRef.current = null
     }
 
+    // Double-click finishes a sketch polyline (the click part of the
+    // double-click already appended the final vertex).
+    const onDoubleClick = () => {
+      if (modeRef.current === 'sketch') commitSketchRun()
+    }
+
     emitter.on('grid:move', onMove)
     emitter.on('grid:click', onClick)
+    emitter.on('grid:double-click', onDoubleClick)
     emitter.on('tool:cancel', onCancel)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     return () => {
       emitter.off('grid:move', onMove)
       emitter.off('grid:click', onClick)
+      emitter.off('grid:double-click', onDoubleClick)
       emitter.off('tool:cancel', onCancel)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
@@ -998,6 +1144,7 @@ const DuctSegmentTool = () => {
 
   if (!activeLevelId) return null
 
+  const sketch = mode === 'sketch'
   const previewSegments: Array<{ a: [number, number, number]; b: [number, number, number] }> = []
   for (let i = 0; i < draftPoints.length - 1; i++) {
     previewSegments.push({ a: draftPoints[i]!, b: draftPoints[i + 1]! })
@@ -1005,6 +1152,29 @@ const DuctSegmentTool = () => {
   const last = draftPoints.at(-1)
   if (last && cursorPos) {
     previewSegments.push({ a: last, b: cursorPos })
+  }
+
+  // Already-committed sketch runs of the level, drawn dimmer under the
+  // in-flight polyline so the operator extends intent they can see. Read
+  // via getState: the cursor-driven re-renders keep it fresh without
+  // subscribing the whole tool to every scene mutation.
+  const committedSketchLines: Array<{
+    color: string
+    points: Array<[number, number, number]>
+  }> = []
+  if (sketch) {
+    const sketchNode = Object.values(useScene.getState().nodes).find(
+      (n) => n?.type === 'duct-sketch' && n.parentId === activeLevelId,
+    )
+    if (sketchNode && sketchNode.type === 'duct-sketch') {
+      for (const run of sketchNode.runs) {
+        if (run.points.length < 2) continue
+        committedSketchLines.push({
+          color: SKETCH_SYSTEM_COLORS[run.system],
+          points: run.points.map((p) => [p.x, 0.02, p.z] as [number, number, number]),
+        })
+      }
+    }
   }
 
   // Wall-style dimension pill above the cursor: absolute world coords before
@@ -1054,7 +1224,7 @@ const DuctSegmentTool = () => {
       {/* Ceiling-mode surface highlight — the ceiling the cursor is under,
           tinted at its own elevation so the duct reads as hung against a
           real surface instead of a point floating in space. */}
-      {ceilingMode && hoverCeiling && <CeilingHighlight ceiling={hoverCeiling} />}
+      {!sketch && ceilingMode && hoverCeiling && <CeilingHighlight ceiling={hoverCeiling} />}
       {/* Cursor marker — the same ground ring + vertical line + tool-icon
           badge walls and items show while drawing (icon resolved from the
           active `duct-segment` structure-tools entry). The dimension pill
@@ -1081,7 +1251,7 @@ const DuctSegmentTool = () => {
               ref={cursorRef}
             />
           )}
-          {pillParts && (
+          {pillParts && !sketch && (
             <group position={cursorPos}>
               <Html
                 center
@@ -1100,6 +1270,20 @@ const DuctSegmentTool = () => {
               </Html>
             </group>
           )}
+          {sketch && cursorPos && (
+            <group position={[cursorPos[0], 0, cursorPos[2]]}>
+              <Html
+                center
+                position={[0, 1.2, 0]}
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+                zIndexRange={[100, 0]}
+              >
+                <div className="whitespace-nowrap rounded-full border border-border/60 bg-background/90 px-3 py-0.5 text-[10px] shadow-sm backdrop-blur">
+                  Эскиз · {SKETCH_SYSTEM_LABELS[profile.system]} · Enter — завершить
+                </div>
+              </Html>
+            </group>
+          )}
         </>
       )}
       {/* Committed point pips */}
@@ -1109,17 +1293,54 @@ const DuctSegmentTool = () => {
           <meshBasicMaterial color="#818cf8" depthTest={false} />
         </mesh>
       ))}
-      {/* Preview sections */}
-      {previewSegments.map((seg, i) => (
-        <PreviewSegment
-          a={seg.a}
-          b={seg.b}
-          endPort={endSnap.port}
-          key={`seg-${i}`}
-          profile={profile}
-          startPort={startPortRef.current}
-        />
-      ))}
+      {/* Preview sections — real duct ghost in build mode, thin
+          system-tinted intent line in sketch mode. depthTest off so the
+          intent reads through walls, like the rest of the tool chrome. */}
+      {sketch && (
+        <>
+          {committedSketchLines.map((line, i) => (
+            <line key={`sketch-run-${i}`}>
+              <bufferGeometry
+                ref={(g) => {
+                  if (g) g.setFromPoints(line.points.map((p) => new Vector3(...p)))
+                }}
+              />
+              <lineBasicMaterial color={line.color} depthTest={false} opacity={0.4} transparent />
+            </line>
+          ))}
+          {previewSegments.map((seg, i) => (
+            <line key={`sketch-seg-${i}`}>
+              <bufferGeometry
+                ref={(g) => {
+                  if (g) {
+                    g.setFromPoints([
+                      new Vector3(seg.a[0], 0.02, seg.a[2]),
+                      new Vector3(seg.b[0], 0.02, seg.b[2]),
+                    ])
+                  }
+                }}
+              />
+              <lineBasicMaterial
+                color={SKETCH_SYSTEM_COLORS[profile.system]}
+                depthTest={false}
+                opacity={0.9}
+                transparent
+              />
+            </line>
+          ))}
+        </>
+      )}
+      {!sketch &&
+        previewSegments.map((seg, i) => (
+          <PreviewSegment
+            a={seg.a}
+            b={seg.b}
+            endPort={endSnap.port}
+            key={`seg-${i}`}
+            profile={profile}
+            startPort={startPortRef.current}
+          />
+        ))}
       {/* Auto-fitting ghosts — the elbow / tee / cross the next click mints. */}
       {ghostFittings.map((fitting) => (
         <FittingGhost fitting={fitting} key={fitting.id} />

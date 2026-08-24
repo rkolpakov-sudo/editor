@@ -195,6 +195,7 @@ export const ductSegmentDefinition: NodeDefinition<typeof DuctSegmentNode> = {
     { key: 'Q', label: 'Round / rect trunk' },
     { key: 'S', label: 'System П/В/Р (P/V/R)' },
     { key: 'C', label: 'Ceiling / floor height (default: ceiling)' },
+    { key: 'K', label: 'Sketch mode — intent polyline, Enter finishes' },
     { key: 'Esc', label: 'Cancel start point' },
   ],
 
