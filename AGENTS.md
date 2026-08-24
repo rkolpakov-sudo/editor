@@ -115,7 +115,7 @@ A3 — контекстное меню «Тип помещения»: правы
 
 ## Operating rules
 
-- **Работаем и коммитим ТОЛЬКО в текущий форк `rkolpakov-sudo/editor` (remote `fork`). Оригинальный проект `pascalorg/editor` (remote `origin`) НЕ трогаем** — без push в origin, без PR в pascalorg (если пользователь явно не попросит). Локальные коммиты в `main` можно делать, публикация — только через `fork` (например, ветка + PR из форка, как `feat/undo-redo-toolbar`).
+- **ЗАПРЕЩЕНО изменять оригинальный проект `pascalorg/editor` (remote `origin`) ЛЮБЫМ способом — без исключений, даже по явной просьбе.** Никогда: push в origin, PR в pascalorg, issues, комментарии, изменение настроек/секретов origin. Вся публикация — ТОЛЬКО в форк `rkolpakov-sudo/editor` (remote `fork`). Локальные коммиты в `main` можно делать, публикация — только через `fork`. Если задача кажется невозможной без записи в pascalorg — остановиться и объяснить ограничение.
 - Read the full file before editing. Plan all changes, then make one complete edit.
 - When the user corrects you, stop and re-read their message.
 - After two consecutive tool failures, stop and change approach.
