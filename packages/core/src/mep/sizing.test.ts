@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { frictionPressureDropPerMeterPa, velocityMps } from './aerodynamics'
 import {
   bestRectDuctCandidate,
+  EQUAL_FRICTION_DEFAULT_PA_PER_M,
   nearestRoundDuctSizeMm,
   nearestRoundForFlowMm,
   rectDuctCandidates,
+  roundDiameterForFrictionM,
   sizeDuctSection,
 } from './sizing'
 
@@ -69,6 +72,24 @@ describe('ГОСТ row pickers', () => {
 
   test('nearestRoundForFlowMm sizes a flow at a target velocity', () => {
     expect(nearestRoundForFlowMm(1000, 5)).toBe(315)
+  })
+
+  test('roundDiameterForFrictionM hits the equal-friction target from both sides', () => {
+    const diameterM = roundDiameterForFrictionM(1000, EQUAL_FRICTION_DEFAULT_PA_PER_M)!
+    const areaM2 = (Math.PI * diameterM * diameterM) / 4
+    const rate = frictionPressureDropPerMeterPa(diameterM, velocityMps(1000, areaM2))
+    // Бисекция даёт наименьший D с R(D) ≤ цели.
+    expect(rate).toBeLessThanOrEqual(EQUAL_FRICTION_DEFAULT_PA_PER_M + 1e-6)
+
+    // Монотонность: большему расходу нужен больший диаметр при той же цели.
+    const small = roundDiameterForFrictionM(300, EQUAL_FRICTION_DEFAULT_PA_PER_M)!
+    const large = roundDiameterForFrictionM(3000, EQUAL_FRICTION_DEFAULT_PA_PER_M)!
+    expect(large).toBeGreaterThan(small)
+
+    // Деградированные входы.
+    expect(roundDiameterForFrictionM(0, EQUAL_FRICTION_DEFAULT_PA_PER_M)).toBeNull()
+    expect(roundDiameterForFrictionM(-5, 1)).toBeNull()
+    expect(roundDiameterForFrictionM(1000, 0)).toBeNull()
   })
 
   test('rectDuctCandidates respects aspect ratio and orders by area', () => {

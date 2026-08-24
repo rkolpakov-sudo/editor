@@ -3,6 +3,7 @@ import {
   ductSectionAreaM2,
   ductSectionHydraulicDiameterM,
   flowAreaM2,
+  frictionPressureDropPerMeterPa,
   roundDiameterForFlowM,
   roundDiameterM,
   velocityMps,
@@ -166,4 +167,43 @@ export function sectionHydraulicDiameterM(profile: DuctSectionProfile): number {
  *  already snapped onto the ГОСТ round row. */
 export function nearestRoundForFlowMm(flowM3h: number, velocityMps: number): number {
   return nearestRoundDuctSizeMm(roundDiameterForFlowM(flowM3h, velocityMps))
+}
+
+// ── Метод равных потерь (опция агента трассировки, PLAN-AGENT §2.2/§2.3) ──
+
+/** Рабочее значение удельных потерь для метода равных потерь, Па/м.
+ *  Это предпочтение трассировки (аналог Revit Routing Preferences), а не
+ *  норматив — редактируется в «Предпочтениях трассировки». */
+export const EQUAL_FRICTION_DEFAULT_PA_PER_M = 1
+
+/**
+ * Метод равных потерь: круглый диаметр (м), при котором удельные потери
+ * трения впервые опускаются до `targetPaPerM` при расходе `flowM3h`.
+ * Обратная задача к `frictionPressureDropPerMeterPa`; λ зависит от Re(D),
+ * поэтому решается бисекцией по монотонно убывающей R(D). Диапазон поиска —
+ * 20 мм … 2,5 м; для расхода, не покрываемого даже 2,5 м, возвращается верх.
+ */
+export function roundDiameterForFrictionM(flowM3h: number, targetPaPerM: number): number | null {
+  if (
+    !Number.isFinite(flowM3h) ||
+    flowM3h <= 0 ||
+    !Number.isFinite(targetPaPerM) ||
+    targetPaPerM <= 0
+  ) {
+    return null
+  }
+  const rateAt = (diameterM: number): number => {
+    const areaM2 = (Math.PI * diameterM * diameterM) / 4
+    return frictionPressureDropPerMeterPa(diameterM, velocityMps(flowM3h, areaM2))
+  }
+  let lo = 0.02
+  let hi = 2.5
+  if (rateAt(lo) <= targetPaPerM) return lo
+  if (rateAt(hi) > targetPaPerM) return hi
+  for (let i = 0; i < 80; i += 1) {
+    const mid = (lo + hi) / 2
+    if (rateAt(mid) > targetPaPerM) lo = mid
+    else hi = mid
+  }
+  return hi
 }
