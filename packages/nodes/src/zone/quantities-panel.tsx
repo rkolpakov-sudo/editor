@@ -5,6 +5,8 @@ import {
   resolveAutoZonePolygon,
   resolveRequiredAirflowM3h,
   SPACE_CATEGORIES,
+  SPACE_CATEGORY_LABELS,
+  SPACE_CATEGORY_RATES,
   useLiveNodeOverrides,
   useScene,
   type ZoneNode,
@@ -318,32 +320,6 @@ function RoomDocumentationPanel({ zone }: { zone: ZoneNode }) {
   )
 }
 
-const SPACE_CATEGORY_LABELS: Record<string, string> = {
-  kitchen_gas: 'Кухня (газ)',
-  kitchen_electric: 'Кухня (электр.)',
-  bath: 'Ванная',
-  toilet: 'Туалет',
-  combined_wc: 'Совмещённый санузел',
-  living: 'Жилая комната',
-  office_short: 'Офис <2000 ч',
-  office_permanent: 'Офис постоянный',
-  public: 'Общественное (по заданию)',
-  industrial: 'Промышленное (по заданию)',
-}
-
-const SPACE_CATEGORY_RATES: Record<string, string> = {
-  kitchen_gas: '90 м³/ч',
-  kitchen_electric: '60 м³/ч',
-  bath: '25 м³/ч',
-  toilet: '25 м³/ч',
-  combined_wc: '50 м³/ч',
-  living: '3 м³/ч·м²',
-  office_short: '20 м³/ч·чел',
-  office_permanent: '60 м³/ч·чел',
-  public: 'по заданию',
-  industrial: 'по заданию',
-}
-
 // ── MEP: ventilation airflow by room category (СП 54/СП 60) ───────────────
 
 const EXHAUST_CATEGORIES = new Set([
@@ -368,7 +344,7 @@ function VentilationSection({ zone, areaM2 }: { zone: ZoneNode; areaM2: number |
           update({ spaceCategory: spaceCategory as ZoneNode['spaceCategory'] })
         }
         options={SPACE_CATEGORIES.map((category) => ({
-          label: SPACE_CATEGORY_LABELS[category] ?? category,
+          label: SPACE_CATEGORY_LABELS[category],
           value: category,
         }))}
         value={zone.spaceCategory}
@@ -376,7 +352,7 @@ function VentilationSection({ zone, areaM2 }: { zone: ZoneNode; areaM2: number |
       <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
         <span className="text-muted-foreground">Норма воздухообмена</span>
         <span className="font-mono font-medium text-foreground">
-          {SPACE_CATEGORY_RATES[zone.spaceCategory] ?? zone.spaceCategory}
+          {SPACE_CATEGORY_RATES[zone.spaceCategory]}
         </span>
       </div>
       <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">

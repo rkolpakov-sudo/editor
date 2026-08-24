@@ -2380,6 +2380,42 @@ describe('procedural zones', () => {
     expect(plan.update).toHaveLength(0)
   })
 
+  test('reclassification survives zone regeneration (W10)', () => {
+    // The user reclassifies a room from the context menu / inspector, then
+    // nudges a wall — the regeneration update path must touch geometry only
+    // and never reset user-set fields like spaceCategory.
+    const walls = squareWalls()
+    const autoZone = ZoneNode.parse({
+      id: 'zone_auto_room',
+      name: 'Room 1',
+      polygon: square,
+      autoFromWalls: true,
+      boundaryWallIds: walls.map((wall) => wall.id),
+      spaceRole: 'room',
+      spaceCategory: 'kitchen_gas',
+    })
+
+    // Same wall ids, moved geometry → matched zone takes the update path.
+    const grownWalls = [
+      WallNode.parse({ ...walls[0]!, end: [6, 0] }),
+      WallNode.parse({ ...walls[1]!, start: [6, 0], end: [6, 4] }),
+      WallNode.parse({ ...walls[2]!, start: [6, 4], end: [0, 4] }),
+      WallNode.parse({ ...walls[3]!, start: [0, 4] }),
+    ]
+    const { spaces } = detectSpacesForLevel('level-1', grownWalls)
+    expect(spaces).toHaveLength(1)
+
+    const plan = planAutoZonesForLevel(spaces, [autoZone])
+
+    expect(plan.delete).toHaveLength(0)
+    expect(plan.create).toHaveLength(0)
+    expect(plan.update).toHaveLength(1)
+    expect(Object.keys(plan.update[0]!.data).sort()).toEqual(['polygon'])
+    // The category lives on the stored node — the patch must not overwrite it.
+    const regenerated = ZoneNode.parse({ ...autoZone, ...plan.update[0]!.data })
+    expect(regenerated.spaceCategory).toBe('kitchen_gas')
+  })
+
   test('walls closing a room materialize an auto zone through the live sync', () => {
     const levelId = 'level_auto_zone_sync'
     const walls = squareWalls().map((wall, index) =>

@@ -68,6 +68,7 @@ import {
   resolveFloorplanWallDimensionReference,
 } from '../../../lib/floorplan/floorplan-mode'
 import { clientToPlan } from '../../../lib/floorplan/plan-coords'
+import { floorplanEmitter } from '../../../lib/floorplan-events'
 import {
   type ActiveInteractionScope,
   boundaryReshapeScope,
@@ -894,6 +895,25 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
     [handleSelect, startDirectMoveDrag, startDirectRotateDrag, startGroupMoveDrag],
   )
 
+  const handleEntryContextMenu = useCallback(
+    (id: AnyNodeId, event: ReactMouseEvent<SVGGElement>) => {
+      const node = useScene.getState().nodes[id]
+      if (node?.type !== 'zone') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (isFloorplanOpeningPlacementActiveNow()) return
+      // A right-click always targets the room under the cursor — make it the
+      // sole selection so the menu acts on what the user pointed at.
+      applyEntrySelection(id, { shouldToggle: false, isolateMember: false })
+      floorplanEmitter.emit('floorplan:node-context-menu', {
+        nodeId: id,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      })
+    },
+    [applyEntrySelection],
+  )
+
   const floorplanData = useMemo(() => {
     if (!levelId) {
       geometryCacheRef.current.clear()
@@ -1408,6 +1428,7 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
             nodes={nodes}
             onClickStop={handleClickStop}
             onEntryPointerDown={handleEntryPointerDown}
+            onEntryContextMenu={handleEntryContextMenu}
             onGroupMovePointerDown={handleGroupMoveHandlePointerDown}
             onHandleHoverChange={setHoveredHandleId}
             onHandleDoubleClick={commitAffordanceAction}
@@ -1454,6 +1475,7 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
             nodes={nodes}
             onClickStop={handleClickStop}
             onEntryPointerDown={handleEntryPointerDown}
+            onEntryContextMenu={handleEntryContextMenu}
             onGroupMovePointerDown={handleGroupMoveHandlePointerDown}
             onHandleHoverChange={setHoveredHandleId}
             onHandleDoubleClick={commitAffordanceAction}
@@ -1771,6 +1793,7 @@ type FloorplanRegistryEntryProps = {
   nodes: Record<string, AnyNode>
   onClickStop: (event: React.MouseEvent<SVGGElement>) => void
   onEntryPointerDown: (id: AnyNodeId, event: ReactPointerEvent<SVGGElement>) => void
+  onEntryContextMenu: (id: AnyNodeId, event: ReactMouseEvent<SVGGElement>) => void
   onGroupMovePointerDown: (id: AnyNodeId, event: ReactPointerEvent<SVGGElement>) => boolean
   onHandleHoverChange: (id: string | null) => void
   onHandleDoubleClick: (
@@ -1818,6 +1841,7 @@ const FloorplanRegistryEntry = memo(function FloorplanRegistryEntry({
   nodes,
   onClickStop,
   onEntryPointerDown,
+  onEntryContextMenu,
   onGroupMovePointerDown,
   onHandleHoverChange,
   onHandleDoubleClick,
@@ -1986,12 +2010,17 @@ const FloorplanRegistryEntry = memo(function FloorplanRegistryEntry({
 
   const entryClick = isMarqueeSelectionActive ? undefined : onClickStop
   const entryPointerDown = isMarqueeSelectionActive ? undefined : handlePointerDown
+  const entryContextMenu =
+    isMarqueeSelectionActive || !onEntryContextMenu
+      ? undefined
+      : (event: ReactMouseEvent<SVGGElement>) => onEntryContextMenu(nodeId, event)
 
   return (
     <g
       className="floorplan-registry-entry"
       data-node-id={nodeId}
       onClick={entryClick}
+      onContextMenu={entryContextMenu}
       onPointerDown={entryPointerDown}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}

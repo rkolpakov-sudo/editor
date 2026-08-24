@@ -1,7 +1,12 @@
-import { SPACE_CATEGORIES, type SpaceCategory } from '../schema/nodes/zone'
+import {
+  SPACE_CATEGORIES,
+  SPACE_CATEGORY_LABELS,
+  SPACE_CATEGORY_RATES,
+  type SpaceCategory,
+} from '../schema/nodes/zone'
 
 export type { SpaceCategory }
-export { SPACE_CATEGORIES }
+export { SPACE_CATEGORIES, SPACE_CATEGORY_LABELS, SPACE_CATEGORY_RATES }
 
 /**
  * Air-loop system — the ГОСТ 21.602 designation of a duct run:

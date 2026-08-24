@@ -131,6 +131,7 @@ import {
 } from '../editor-2d/floorplan-render-context'
 import { FloorplanSnapBeaconLayer } from '../editor-2d/floorplan-snap-beacon-layer'
 import { FloorplanWallMoveGhostLayer } from '../editor-2d/floorplan-wall-move-ghost-layer'
+import { FloorplanZoneContextMenu } from '../editor-2d/floorplan-zone-context-menu'
 import { FloorplanDraftLayer } from '../editor-2d/renderers/floorplan-draft-layer'
 import { FloorplanGeometryRenderer } from '../editor-2d/renderers/floorplan-geometry-renderer'
 import { FloorplanMarqueeLayer } from '../editor-2d/renderers/floorplan-marquee-layer'
@@ -11149,6 +11150,7 @@ export function FloorplanPanel({
             only action menus the floor plan mounts — the single-node
             pill, plus the group pill for multi-selections. */}
         <FloorplanRegistryActionMenu />
+        <FloorplanZoneContextMenu />
         <FloorplanGroupActionMenu />
 
         {(levelNode?.type === 'level' || hasAmbientBuildingLevel) &&

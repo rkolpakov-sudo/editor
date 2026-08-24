@@ -21,6 +21,36 @@ export const SPACE_CATEGORIES = [
 ] as const
 export type SpaceCategory = (typeof SPACE_CATEGORIES)[number]
 
+/** Russian UI labels for the categories — shared by the zone inspector and
+ *  the floorplan context menu so both surfaces never drift apart. */
+export const SPACE_CATEGORY_LABELS: Record<SpaceCategory, string> = {
+  kitchen_gas: 'Кухня (газ)',
+  kitchen_electric: 'Кухня (электр.)',
+  bath: 'Ванная',
+  toilet: 'Туалет',
+  combined_wc: 'Совмещённый санузел',
+  living: 'Жилая комната',
+  office_short: 'Офис <2000 ч',
+  office_permanent: 'Офис постоянный',
+  public: 'Общественное (по заданию)',
+  industrial: 'Промышленное (по заданию)',
+}
+
+/** Normative air-exchange rate per category (СП 54) — display hint only;
+ *  the numeric engine values live in `mep/constants.ts`. */
+export const SPACE_CATEGORY_RATES: Record<SpaceCategory, string> = {
+  kitchen_gas: '90 м³/ч',
+  kitchen_electric: '60 м³/ч',
+  bath: '25 м³/ч',
+  toilet: '25 м³/ч',
+  combined_wc: '50 м³/ч',
+  living: '3 м³/ч·м²',
+  office_short: '20 м³/ч·чел',
+  office_permanent: '60 м³/ч·чел',
+  public: 'по заданию',
+  industrial: 'по заданию',
+}
+
 export const ZoneNode = BaseNode.extend({
   id: objectId('zone'),
   type: nodeType('zone'),
