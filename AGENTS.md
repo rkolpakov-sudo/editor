@@ -108,8 +108,11 @@ A3 — контекстное меню «Тип помещения»: правы
 зоны); общие словари подписей/норм перенесены в схему (`SPACE_CATEGORY_LABELS/RATES` в
 `schema/nodes/zone.ts`), правый клик идёт через editor-emitter
 (`lib/floorplan-events.ts`) из floorplan-registry-layer; W10-тест: регенерация зоны при
-изменении стен трогает только `polygon`. Следующий — **Этап B** (ядро агента
-`packages/core/src/mep/agent/*`).
+изменении стен трогает только `polygon`. **Этапы B1–B5 выполнены** (ядро агента
+`packages/core/src/mep/agent/*`: validate-sketch, recognize-topology, flows, section-sizing +
+равные потери в sizing, elevations, fittings + routing-preferences, build-plan — конвейер
+§2.2 PLAN-AGENT до плана построения; 3321 тест зелёный). Следующий — **Этап C** (кнопка
+«Трассировка», рекомендации оборудования, автоответвления, отметки в DXF).
 Архитектурно-чувствительные
 изменения (новая схема/система/инструмент) — сначала читать `wiki/architecture/` по правилам ниже.
 
