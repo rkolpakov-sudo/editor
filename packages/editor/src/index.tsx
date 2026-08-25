@@ -447,8 +447,10 @@ export {
 export {
   applyAllBypasses,
   applyGostSegmentation,
+  applyRoutingPlan,
   type BypassApplyReport,
   type GostSplitOutcome,
+  type RoutingApplyReport,
 } from './lib/mep-actions'
 export { consumePlacementDragRelease } from './lib/placement-drag-release'
 export {

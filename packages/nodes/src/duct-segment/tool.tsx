@@ -62,6 +62,7 @@ import {
 } from '../shared/ports'
 import { ductSegmentDefinition } from './definition'
 import { ductPortDiameterIn, rectSectionAxes, rollToContinueAcrossElbow } from './geometry'
+import { DuctSketchToolbar } from './sketch-toolbar'
 
 /**
  * Continuous placement tool for duct segments.
@@ -605,6 +606,40 @@ const DuctSegmentTool = () => {
   profileRef.current = profile
   const ceilingModeRef = useRef(ceilingMode)
   ceilingModeRef.current = ceilingMode
+  // Коммит текущей линии эскиза (определён в useEffect подписки; кнопка
+  // «Завершить линию» тулбара вызывает через ref).
+  const commitSketchRunRef = useRef<() => void>(() => {})
+  // Длина текущей линии эскиза — для тулбара (индикация состояния).
+  const draftLengthM = useMemo(() => {
+    let total = 0
+    for (let i = 0; i < draftPoints.length - 1; i += 1) {
+      total += Math.hypot(
+        draftPoints[i + 1]![0] - draftPoints[i]![0],
+        draftPoints[i + 1]![2] - draftPoints[i]![2],
+      )
+    }
+    return total
+  }, [draftPoints])
+  const lastDraftPoint = draftPoints.at(-1) ?? null
+  // Явная установка режима/системы для кнопок тулбара (UI-дубликаты K и S).
+  const setModeValue = (value: 'build' | 'sketch') => {
+    if (modeRef.current === value) return
+    setDraftPoints([])
+    setCursorPos(null)
+    setSnapTarget(null)
+    setEndSnap({ port: null, body: null })
+    setHoverCeiling(null)
+    startPortRef.current = null
+    startBodyRef.current = null
+    altAnchorRef.current = null
+    setAltActive(false)
+    sketchModePreferred = value === 'sketch'
+    setMode(value)
+  }
+  const setSystemValue = (value: DraftProfile['system']) => {
+    setProfile((p) => (p.system === value ? p : { ...p, system: value }))
+    triggerSFX('sfx:grid-snap')
+  }
   // Port the anchored START point snapped onto (null = free placement).
   // Read at commit so a turn off an existing run mints an elbow there.
   const startPortRef = useRef<ScenePort | null>(null)
@@ -908,6 +943,8 @@ const DuctSegmentTool = () => {
       setDraftPoints([])
       setCursorPos(null)
     }
+    // Тулбар вызывает коммит через ref (кнопка «Завершить линию»).
+    commitSketchRunRef.current = commitSketchRun
 
     const cycleSystem = () => {
       // П → В → Р → П (ГОСТ 21.602); shared by build and sketch modes.
@@ -1221,6 +1258,26 @@ const DuctSegmentTool = () => {
 
   return (
     <LevelOffsetGroup>
+      {/* Закреплённый тулбар инструмента (UX: кнопки-дубликаты клавиш K/S/
+          Enter/Esc + состояние эскиза). fullscreen-обёртка drei Html не
+          перехватывает клики канваса (pointer-events: none), панель — auto. */}
+      <Html fullscreen style={{ pointerEvents: 'none' }} zIndexRange={[160, 140]}>
+        <DuctSketchToolbar
+          activeLevelId={activeLevelId}
+          draftLengthM={draftLengthM}
+          draftPointCount={draftPoints.length}
+          lastPoint={lastDraftPoint}
+          mode={mode}
+          onCancelDraft={() => {
+            setDraftPoints([])
+            setCursorPos(null)
+          }}
+          onFinish={() => commitSketchRunRef.current()}
+          onSetMode={setModeValue}
+          onSetSystem={setSystemValue}
+          system={profile.system}
+        />
+      </Html>
       {/* Ceiling-mode surface highlight — the ceiling the cursor is under,
           tinted at its own elevation so the duct reads as hung against a
           real surface instead of a point floating in space. */}
