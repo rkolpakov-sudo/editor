@@ -13,7 +13,6 @@ import {
   type ZoneNode,
 } from '@pascal-app/core'
 import { useEffect, useMemo, useState } from 'react'
-import { DropdownMenuContent, DropdownMenuLabel } from '../ui/primitives/dropdown-menu'
 
 const EXHAUST_CATEGORIES = new Set<SpaceCategory>([
   'kitchen_gas',
@@ -43,13 +42,13 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Единый инструмент комнаты (PLAN-AGENT A3 + UX-объединение): все
- * характеристики помещения в одном месте — имя, тип по СП 54, воздухообмен,
- * площадь и высота потолка, терминалы с расходами и итог расчёта с
- * рекомендацией оборудования. Открывается левым или правым кликом по комнате
- * и используется инспектором зоны (Scene) — без второго отдельного меню.
+ * Единое контекстное меню комнаты (правая кнопка). Обычная позиционированная
+ * панель у курсора — без Radix/портала, поэтому открытие меню не трогает
+ * выделение помещения. Содержит все характеристики: имя, тип по СП 54,
+ * воздухообмен, площадь/высоту, терминалы с расходами и рекомендацию
+ * оборудования.
  */
-export function RoomUnifiedPanel({ zone }: { zone: ZoneNode }) {
+export function RoomUnifiedPanel({ zone, x, y }: { zone: ZoneNode; x: number; y: number }) {
   const updateNode = useScene((state) => state.updateNode)
   const nodes = useScene((state) => state.nodes)
   const [nameDraft, setNameDraft] = useState(zone.name)
@@ -72,17 +71,17 @@ export function RoomUnifiedPanel({ zone }: { zone: ZoneNode }) {
           terminalId: assignment.terminalId,
           name: terminal?.name ?? assignment.terminalId,
           flowM3h: assignment.flowM3h,
-          direction: terminalDirection(terminal as never),
+          isExhaust: terminalDirection(terminal as never) === 'return',
         }
       })
   }, [nodes, zone])
 
   const recommendation = useMemo(() => {
     const supply = terminals
-      .filter((terminal) => terminal.direction === 'supply')
+      .filter((terminal) => !terminal.isExhaust)
       .reduce((sum, terminal) => sum + terminal.flowM3h, 0)
     const exhaust = terminals
-      .filter((terminal) => terminal.direction === 'return')
+      .filter((terminal) => terminal.isExhaust)
       .reduce((sum, terminal) => sum + terminal.flowM3h, 0)
     return recommendEquipment(supply, exhaust)
   }, [terminals])
@@ -94,100 +93,100 @@ export function RoomUnifiedPanel({ zone }: { zone: ZoneNode }) {
   }
 
   return (
-    <DropdownMenuContent
-      align="start"
-      className="min-w-72"
-      onCloseAutoFocus={(event) => event.preventDefault()}
-      side="right"
+    <div
+      className="fixed z-50 max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border/60 bg-background/95 p-3 shadow-lg backdrop-blur-xl"
+      data-room-panel=""
+      style={{
+        left: Math.min(x, window.innerWidth - 340),
+        top: Math.min(y, window.innerHeight - 80),
+      }}
     >
-      <div className="px-3 py-2">
-        <DropdownMenuLabel className="px-0 text-sm">Помещение</DropdownMenuLabel>
-        <input
-          className="mt-1 w-full rounded-md border border-border/50 bg-[#2C2C2E] px-2 py-1.5 text-foreground text-sm outline-none focus:border-sky-500/50"
-          onChange={(event) => setNameDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur()
-          }}
-          type="text"
-          value={nameDraft}
+      <div className="mb-1.5 text-sm font-semibold text-foreground">Помещение</div>
+      <input
+        className="w-full rounded-md border border-border/50 bg-[#2C2C2E] px-2 py-1.5 text-foreground text-sm outline-none focus:border-sky-500/50"
+        onChange={(event) => setNameDraft(event.target.value)}
+        onBlur={commitName}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+        }}
+        type="text"
+        value={nameDraft}
+      />
+
+      <div className="mt-3 flex flex-col gap-1">
+        <span className="text-muted-foreground text-[10px]">Тип помещения (СП 54)</span>
+        <select
+          className="rounded-md border border-border/50 bg-[#2C2C2E] px-2 py-1.5 text-foreground text-xs outline-none"
+          onChange={(event) =>
+            updateNode(zone.id, {
+              spaceCategory: event.target.value as SpaceCategory,
+              name: SPACE_CATEGORY_LABELS[event.target.value as SpaceCategory],
+            })
+          }
+          value={zone.spaceCategory}
+        >
+          {SPACE_CATEGORIES.map((category) => (
+            <option key={category} value={category}>
+              {SPACE_CATEGORY_LABELS[category]} — {SPACE_CATEGORY_RATES[category]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-1.5">
+        <InfoRow label="Норма воздухообмена" value={SPACE_CATEGORY_RATES[zone.spaceCategory]} />
+        <InfoRow
+          label="Требуемый расход"
+          value={airflow !== null ? `${Math.round(airflow)} м³/ч` : 'по заданию'}
         />
+        <InfoRow label="Система" value={isExhaust ? 'В — вытяжка' : 'П — приток'} />
+        <InfoRow label="Площадь" value={`${areaM2.toFixed(1).replace('.', ',')} м²`} />
+        <InfoRow
+          label="Высота потолка"
+          value={`${Number(zone.ceilingHeight.toFixed(2)).toString().replace('.', ',')} м`}
+        />
+      </div>
 
-        <div className="mt-3 flex flex-col gap-1">
-          <span className="text-muted-foreground text-[10px]">Тип помещения (СП 54)</span>
-          <select
-            className="rounded-md border border-border/50 bg-[#2C2C2E] px-2 py-1.5 text-foreground text-xs outline-none"
-            onChange={(event) =>
-              updateNode(zone.id, {
-                spaceCategory: event.target.value as SpaceCategory,
-                name: SPACE_CATEGORY_LABELS[event.target.value as SpaceCategory],
-              })
-            }
-            value={zone.spaceCategory}
-          >
-            {SPACE_CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {SPACE_CATEGORY_LABELS[category]} — {SPACE_CATEGORY_RATES[category]}
-              </option>
+      <div className="mt-3">
+        <span className="text-muted-foreground text-[10px]">Терминалы</span>
+        {terminals.length === 0 ? (
+          <p className="mt-1 text-muted-foreground text-[10px]">
+            Решёток/диффузоров в комнате нет — добавьте терминалы через каталог MEP.
+          </p>
+        ) : (
+          <div className="mt-1 flex flex-col gap-1">
+            {terminals.map((terminal) => (
+              <InfoRow
+                key={terminal.terminalId}
+                label={`${terminal.isExhaust ? 'Вытяжка' : 'Приток'} · ${terminal.name}`}
+                value={`${terminal.flowM3h.toFixed(0)} м³/ч`}
+              />
             ))}
-          </select>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-1.5">
-          <InfoRow label="Норма воздухообмена" value={SPACE_CATEGORY_RATES[zone.spaceCategory]} />
-          <InfoRow
-            label="Требуемый расход"
-            value={airflow !== null ? `${Math.round(airflow)} м³/ч` : 'по заданию'}
-          />
-          <InfoRow label="Система" value={isExhaust ? 'В — вытяжка' : 'П — приток'} />
-          <InfoRow label="Площадь" value={`${areaM2.toFixed(1).replace('.', ',')} м²`} />
-          <InfoRow
-            label="Высота потолка"
-            value={`${Number(zone.ceilingHeight.toFixed(2)).toString().replace('.', ',')} м`}
-          />
-        </div>
-
-        <div className="mt-3">
-          <span className="text-muted-foreground text-[10px]">Терминалы</span>
-          {terminals.length === 0 ? (
-            <p className="mt-1 text-muted-foreground text-[10px]">
-              Решёток/диффузоров в комнате нет — добавьте терминалы через каталог MEP.
-            </p>
-          ) : (
-            <div className="mt-1 flex flex-col gap-1">
-              {terminals.map((terminal) => (
-                <InfoRow
-                  key={terminal.terminalId}
-                  label={`${terminal.direction === 'return' ? 'Вытяжка' : 'Приток'} · ${terminal.name}`}
-                  value={`${terminal.flowM3h.toFixed(0)} м³/ч`}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {recommendation.length > 0 && (
-          <div className="mt-3">
-            <span className="text-muted-foreground text-[10px]">Рекомендация оборудования</span>
-            <div className="mt-1 flex flex-col gap-1">
-              {recommendation.map((entry) => (
-                <div
-                  className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-1.5 text-[10px]"
-                  key={entry.category}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-foreground">{entry.label}</span>
-                    <span className="font-mono text-emerald-300">
-                      {entry.flowM3h.toFixed(0)} м³/ч → {entry.nominalM3h}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-muted-foreground">{entry.reason}</p>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>
-    </DropdownMenuContent>
+
+      {recommendation.length > 0 && (
+        <div className="mt-3">
+          <span className="text-muted-foreground text-[10px]">Рекомендация оборудования</span>
+          <div className="mt-1 flex flex-col gap-1">
+            {recommendation.map((entry) => (
+              <div
+                className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-1.5 text-[10px]"
+                key={entry.category}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{entry.label}</span>
+                  <span className="font-mono text-emerald-300">
+                    {entry.flowM3h.toFixed(0)} м³/ч → {entry.nominalM3h}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-muted-foreground">{entry.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

@@ -5,7 +5,6 @@ import { useViewer } from '@pascal-app/viewer'
 import { useCallback, useEffect, useState } from 'react'
 import { clientToPlan } from '../../lib/floorplan/plan-coords'
 import { floorplanEmitter } from '../../lib/floorplan-events'
-import { DropdownMenu, DropdownMenuTrigger } from '../ui/primitives/dropdown-menu'
 import { RoomUnifiedPanel } from './room-unified-panel'
 
 type MenuAnchor = { nodeId: AnyNodeId; x: number; y: number }
@@ -29,11 +28,10 @@ function pointInPolygon(
 }
 
 /**
- * Единое контекстное меню комнаты (правая кнопка). Левая кнопка остаётся
- * стандартным выделением: клик по комнате выбирает зону и открывает
- * инспектор-панель справа с теми же характеристиками (имя, тип по СП 54,
- * воздухообмен, площадь/высоту, терминалы, рекомендацию оборудования) —
- * два разрозненных меню объединены в одно содержимое.
+ * Единое контекстное меню комнаты (правая кнопка). Обычная панель у курсора —
+ * без порталов/триггеров, поэтому открытие меню НЕ снимает выделение комнаты.
+ * Левая кнопка остаётся стандартным выделением (инспектор справа с теми же
+ * характеристиками).
  */
 export function FloorplanZoneContextMenu() {
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null)
@@ -53,8 +51,9 @@ export function FloorplanZoneContextMenu() {
     return () => floorplanEmitter.off('floorplan:node-context-menu', open)
   }, [])
 
+  // Правая кнопка по комнате — единое контекстное меню у курсора (fallback,
+  // когда событие не перехватил registry-слой).
   useEffect(() => {
-    // Правая кнопка по комнате — единое контекстное меню у курсора.
     const onContextMenu = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return
       if (
@@ -83,16 +82,25 @@ export function FloorplanZoneContextMenu() {
     return () => document.removeEventListener('contextmenu', onContextMenu)
   }, [openForZone])
 
+  // Закрытие по клику вне панели или Escape.
+  useEffect(() => {
+    if (!anchor) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest('[data-room-panel]')) return
+      setAnchor(null)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAnchor(null)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [anchor])
+
   if (!anchor || !node || node.type !== 'zone') return null
 
-  return (
-    <DropdownMenu open onOpenChange={(open) => !open && setAnchor(null)}>
-      <DropdownMenuTrigger
-        aria-hidden
-        className="fixed h-px w-px"
-        style={{ left: anchor.x, top: anchor.y }}
-      />
-      <RoomUnifiedPanel zone={node as ZoneNode} />
-    </DropdownMenu>
-  )
+  return <RoomUnifiedPanel x={anchor.x} y={anchor.y} zone={node as ZoneNode} />
 }
