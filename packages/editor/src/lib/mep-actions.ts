@@ -3,12 +3,17 @@
 import {
   type AnyNode,
   type AnyNodeId,
+  assignZoneAirflowsToTerminals,
   type BypassPlan,
   buildBypassRunMutations,
+  buildDuctPlan,
   DuctSegmentNode as DuctSegmentSchema,
   planAllBypassRuns,
+  planBuildMutations,
   planGostSplit,
+  terminalFlowMap,
   useScene,
+  type ZoneNode,
 } from '@pascal-app/core'
 
 export type BypassApplyReport = {
@@ -105,4 +110,78 @@ export function applyGostSegmentation(segmentId: AnyNodeId): GostSplitOutcome {
 
   scene.applyNodeChanges({ create, delete: [segmentId] })
   return { kind: 'applied', pieces: plan.lengthsM.length }
+}
+
+export type RoutingApplyReport =
+  | {
+      status: 'no-sketch'
+    }
+  | {
+      status: 'blocked'
+      blockers: string[]
+    }
+  | {
+      status: 'applied'
+      created: number
+      removed: number
+      solutions: string[]
+      violations: string[]
+      notes: string[]
+    }
+
+/** Допустимые системные узлы для флага «собрано агентом» (регенерация W5). */
+const AGENT_BUILT_TYPES = new Set(['duct-segment', 'duct-fitting'])
+
+/**
+ * «Трассировка»: эскиз уровня → план построения → материализация одной
+ * undo-командой (W4/W5). Повторный запуск перестраивает сеть: узлы прошлой
+ * сборки агента (metadata.agentRouting) удаляются.
+ */
+export function applyRoutingPlan(): RoutingApplyReport {
+  const scene = useScene.getState()
+  const sketchNode = Object.values(scene.nodes).find((node) => node?.type === 'duct-sketch')
+  if (!sketchNode) return { status: 'no-sketch' }
+
+  const zones = Object.values(scene.nodes).filter(
+    (node): node is ZoneNode => node?.type === 'zone' && node.spaceRole === 'room',
+  )
+  const assignments = assignZoneAirflowsToTerminals(scene.nodes, zones)
+  const terminalFlows = terminalFlowMap(assignments)
+
+  const plan = buildDuctPlan({
+    sketch: sketchNode,
+    nodes: scene.nodes,
+    terminalFlows,
+  })
+  if (!plan.canBuild) {
+    return { status: 'blocked', blockers: plan.blockers.map((issue) => issue.message) }
+  }
+
+  const agentNodeIds = Object.values(scene.nodes)
+    .filter(
+      (node) =>
+        node != null &&
+        AGENT_BUILT_TYPES.has(node.type) &&
+        (node.metadata as { agentRouting?: boolean } | undefined)?.agentRouting === true,
+    )
+    .map((node) => node.id)
+
+  const mutations = planBuildMutations(plan, {
+    parentId: (sketchNode.parentId ?? undefined) as AnyNodeId | undefined,
+    existingAgentNodeIds: agentNodeIds,
+  })
+
+  scene.applyNodeChanges({
+    create: mutations.create.map(({ node, parentId }) => ({ node, parentId })),
+    delete: mutations.delete,
+  })
+
+  return {
+    status: 'applied',
+    created: mutations.create.length,
+    removed: mutations.delete.length,
+    solutions: plan.solutions,
+    violations: plan.violations.map((issue) => issue.message),
+    notes: mutations.notes,
+  }
 }

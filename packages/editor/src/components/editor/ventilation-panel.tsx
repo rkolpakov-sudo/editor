@@ -18,9 +18,23 @@ import {
   useScene,
   validateDuctNetwork,
 } from '@pascal-app/core'
-import { AlertTriangle, Calculator, Check, ClipboardList, Download, Wind, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Calculator,
+  Check,
+  ClipboardList,
+  Download,
+  Map as MapIcon,
+  Wind,
+  X,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { applyAllBypasses, type BypassApplyReport } from '../../lib/mep-actions'
+import {
+  applyAllBypasses,
+  applyRoutingPlan,
+  type BypassApplyReport,
+  type RoutingApplyReport,
+} from '../../lib/mep-actions'
 import { cn } from '../../lib/utils'
 import useEditor from '../../store/use-editor'
 
@@ -285,6 +299,7 @@ function VentilationContent() {
   const setVentilationOpen = useEditor((s) => s.setVentilationOpen)
   const nodes = useScene((s) => s.nodes)
   const [report, setReport] = useState<BypassApplyReport | null>(null)
+  const [routingReport, setRoutingReport] = useState<RoutingApplyReport | null>(null)
   const [showSpec, setShowSpec] = useState(false)
 
   const networks = useMemo(() => buildDuctNetworks(nodes), [nodes])
@@ -318,6 +333,11 @@ function VentilationContent() {
   const handleAutoBypass = () => {
     const next = applyAllBypasses()
     setReport(next)
+  }
+
+  const handleRouting = () => {
+    const next = applyRoutingPlan()
+    setRoutingReport(next)
   }
 
   const handleDownload = (filename: string, content: string, type: string) => {
@@ -535,6 +555,95 @@ function VentilationContent() {
                 )}
               </div>
             )}
+
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium text-xs">Агент трассировки</p>
+                  <p className="text-muted-foreground text-[10px]">
+                    Эскиз П/В → сеть по нормам (СП 54/СП 60), одна undo-команда
+                  </p>
+                </div>
+                <button
+                  className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2.5 py-1.5 font-medium text-xs text-violet-100 transition-colors hover:bg-violet-500/30 disabled:cursor-default disabled:opacity-40"
+                  onClick={handleRouting}
+                  type="button"
+                >
+                  Трассировка
+                </button>
+              </div>
+
+              {routingReport?.status === 'no-sketch' && (
+                <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-200">
+                  <span className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Нет эскиза: нарисуйте трассы в режиме «Эскиз» duct-инструмента (K).
+                  </span>
+                </div>
+              )}
+
+              {routingReport?.status === 'blocked' && (
+                <div className="mt-2 space-y-1.5">
+                  {routingReport.blockers.map((blocker) => (
+                    <div
+                      className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-xs text-red-200"
+                      key={blocker}
+                    >
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{blocker}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {routingReport?.status === 'applied' && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-2 text-xs text-emerald-200">
+                    <Check className="h-3.5 w-3.5" />
+                    Построено участков: {routingReport.created}
+                    {routingReport.removed > 0 && ` · пересоздано: ${routingReport.removed}`}
+                  </div>
+
+                  {routingReport.violations.length > 0 && (
+                    <div className="space-y-1.5">
+                      {routingReport.violations.map((violation) => (
+                        <div
+                          className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-200"
+                          key={violation}
+                        >
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>{violation}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {routingReport.solutions.length > 0 && (
+                    <details className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-2">
+                      <summary className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                        <MapIcon className="h-3.5 w-3.5" />
+                        Решения трассировки ({routingReport.solutions.length})
+                      </summary>
+                      <ul className="mt-1.5 space-y-1">
+                        {routingReport.solutions.map((solution) => (
+                          <li className="text-[10px] text-muted-foreground" key={solution}>
+                            {solution}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+
+                  {routingReport.notes.length > 0 && (
+                    <div className="text-[10px] text-muted-foreground">
+                      {routingReport.notes.map((note) => (
+                        <p key={note}>· {note}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <NetworkCalcSection markings={markings} networks={networks} nodes={nodes} />
 

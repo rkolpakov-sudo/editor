@@ -7,7 +7,7 @@ import { segmentSegmentIntersection } from '../routing-rules'
 import { type ElevationOptions, resolvePathElevations } from './elevations'
 import type { AgentFittingSpec } from './fittings'
 import { planAgentFittings } from './fittings'
-import type { AgentFlowsResult } from './flows'
+import type { AgentFlowsResult, AgentTerminalRow } from './flows'
 import { computeAgentFlows } from './flows'
 import type { RecognizedTopology } from './recognize-topology'
 import { recognizeTopology } from './recognize-topology'
@@ -63,6 +63,8 @@ export type DuctBuildPlan = {
   canBuild: boolean
   runs: PlannedRun[]
   fittings: AgentFittingSpec[]
+  /** Данные таблицы подтверждения «терминал ← помещение ← расход» (W2). */
+  terminals: AgentTerminalRow[]
   /** Аннотации решений агента для панели «Решения трассировки». */
   solutions: string[]
   /** Предупреждения W3: строить best-effort + красные маркеры. */
@@ -240,6 +242,7 @@ export function buildDuctPlan(input: BuildDuctPlanInput): DuctBuildPlan {
     canBuild,
     runs: plannedRuns,
     fittings: fittingPlan.fittings,
+    terminals: flows.terminals,
     solutions,
     violations,
     blockers,

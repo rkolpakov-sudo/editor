@@ -32,6 +32,11 @@ export type AgentFittingSpec = {
   profile?: DuctSectionProfile
   /** Для врезок: сечение ответвления. */
   branchProfile?: DuctSectionProfile
+  /** Путь-хозяин спецификации (для материализатора). */
+  pathIndex?: number
+  /** Врезка: параметр на теле хозяина 0..1. */
+  hostPathIndex?: number
+  hostT?: number
   note: string
 }
 
@@ -131,6 +136,7 @@ export function planAgentFittings(
         angleDeg,
         radiusFactor: prefs.elbowRadiusFactor,
         profile,
+        pathIndex,
         note: `Отвод ${angleDeg}° R=${prefs.elbowRadiusFactor}D — изгиб полилинии №${path.sourceRunIndex + 1}`,
       })
     }
@@ -192,6 +198,9 @@ export function planAgentFittings(
       radiusFactor: prefs.elbowRadiusFactor,
       profile: hostProfile,
       branchProfile,
+      pathIndex,
+      hostPathIndex: binding.hostPathIndex,
+      hostT: binding.hostT,
       note: `${kind === 'saddle' ? 'Седелка' : 'Тройник'} Ø${branchMm.toFixed(0)}→Ø${trunkMm.toFixed(0)}, врезка ${angleDeg}°${autoNote}`,
     })
   })
