@@ -4,6 +4,7 @@ import type { SystemType } from '../norms-types'
 import { normalizeRoutingPreferences, type RoutingPreferences } from '../routing-preferences'
 import type { PlanPoint } from '../routing-rules'
 import { segmentSegmentIntersection } from '../routing-rules'
+import { planAutoBranches } from './branches'
 import { type ElevationOptions, resolvePathElevations } from './elevations'
 import type { AgentFittingSpec } from './fittings'
 import { planAgentFittings } from './fittings'
@@ -86,6 +87,9 @@ export type BuildDuctPlanInput = {
     ceilingHeightMByPath?: Readonly<Record<number, number>>
   }
   preferences?: Partial<RoutingPreferences>
+  /** C3: терминалы для автоответвления «к ближайшей магистрали».
+   *  Уже привязанные к эскизу игнорируются. */
+  autoBranchTerminalIds?: readonly AnyNodeId[]
 }
 
 function toIssues(
@@ -152,10 +156,75 @@ export function buildDuctPlan(input: BuildDuctPlanInput): DuctBuildPlan {
   }
 
   // 1. Топология: разрезы у установок, привязка концов.
-  const topology = recognizeTopology(runs, input.nodes)
+  let topology = recognizeTopology(runs, input.nodes)
   for (const issue of toIssues('topology', topology.issues)) {
     if (issue.severity === 'blocker') blockers.push(issue)
     else violations.push(issue)
+  }
+
+  // 1.5. C3: автоответвления непривязанных терминалов к ближайшей магистрали.
+  if (input.autoBranchTerminalIds && input.autoBranchTerminalIds.length > 0) {
+    const boundTerminals = new Set<AnyNodeId>()
+    for (const path of topology.paths) {
+      for (const end of ['start', 'end'] as const) {
+        const binding = end === 'start' ? path.start : path.end
+        if (binding.kind === 'terminal') boundTerminals.add(binding.nodeId)
+      }
+    }
+    const terminals = input.autoBranchTerminalIds
+      .filter((id) => !boundTerminals.has(id))
+      .map((id) => input.nodes[id])
+      .filter(
+        (
+          node,
+        ): node is AnyNode & {
+          position: [number, number, number]
+          terminalType: 'supply-register' | 'diffuser' | 'return-grille'
+        } => node?.type === 'duct-terminal',
+      )
+      .map((node) => ({
+        id: node.id,
+        position: node.position,
+        terminalType: node.terminalType,
+      }))
+    const branchResult = planAutoBranches(topology, terminals, prefs)
+    for (const issue of branchResult.issues) {
+      violations.push({
+        severity: 'warning',
+        source: 'crossings',
+        code: issue.code,
+        message: issue.message,
+      })
+    }
+    if (branchResult.branches.length > 0) {
+      const base = topology.paths.length
+      const branchPaths: RecognizedTopology['paths'] = branchResult.branches.map(
+        (branch, index) => {
+          const pathIndex = base + index
+          return {
+            pathIndex,
+            system: branch.system,
+            sourceRunIndex: -1,
+            points: [
+              { x: branch.terminalPoint[0], z: branch.terminalPoint[1], elev: 'auto' },
+              { x: branch.tapPoint[0], z: branch.tapPoint[1], elev: 'auto' },
+            ],
+            lengthM: Math.hypot(
+              branch.terminalPoint[0] - branch.tapPoint[0],
+              branch.terminalPoint[1] - branch.tapPoint[1],
+            ),
+            start: { kind: 'terminal', nodeId: branch.terminalId, distanceM: 0 },
+            end: { kind: 'tap', hostPathIndex: branch.hostPathIndex, hostT: branch.hostT },
+          }
+        },
+      )
+      topology = { ...topology, paths: [...topology.paths, ...branchPaths] }
+      for (const branch of branchResult.branches) {
+        solutions.push(
+          `Автоответвление: терминал ${branch.terminalId} → магистраль №${branch.hostPathIndex + 1} в точке (${branch.tapPoint[0].toFixed(2)}, ${branch.tapPoint[1].toFixed(2)}).`,
+        )
+      }
+    }
   }
 
   // 2. Расходы: дерево от установки, баланс П/В, монотонность.

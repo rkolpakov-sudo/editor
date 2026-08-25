@@ -1,4 +1,5 @@
 export * from './aerodynamics'
+export * from './agent/branches'
 export * from './agent/build-plan'
 export * from './agent/elevations'
 export * from './agent/fittings'

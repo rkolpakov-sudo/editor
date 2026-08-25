@@ -152,6 +152,9 @@ export function applyRoutingPlan(): RoutingApplyReport {
     sketch: sketchNode,
     nodes: scene.nodes,
     terminalFlows,
+    autoBranchTerminalIds: Object.values(scene.nodes)
+      .filter((node) => node?.type === 'duct-terminal')
+      .map((node) => node.id),
   })
   if (!plan.canBuild) {
     return { status: 'blocked', blockers: plan.blockers.map((issue) => issue.message) }
