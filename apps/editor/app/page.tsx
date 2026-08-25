@@ -1,9 +1,10 @@
 'use client'
 
 import { Editor, ItemsPanel } from '@pascal-app/editor'
-import { Hammer, Layers, Package, Settings } from 'lucide-react'
+import { Hammer, Layers, Package, Settings, X } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useState } from 'react'
 import { BuildTab } from '@/components/build-tab'
 import {
   CommunityViewerToolbarLeft,
@@ -87,17 +88,31 @@ const SIDEBAR_TABS = [
 const PROJECT_ID = 'local-editor'
 
 export default function Home() {
+  const [showBlankHint, setShowBlankHint] = useState(true)
   return (
     <div className="relative h-screen w-screen">
-      {PROJECT_ID === 'local-editor' && (
+      {PROJECT_ID === 'local-editor' && showBlankHint && (
         <div className="pointer-events-none absolute top-3 left-1/2 z-40 -translate-x-1/2">
-          <div className="pointer-events-auto flex max-w-[min(92vw,42rem)] flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full border border-border/60 bg-background/90 px-4 py-1.5 text-xs shadow-sm backdrop-blur">
+          {/* Пилл не должен перехватывать клики по элементам редактора под ним:
+              pointer-events-auto только у ссылки и кнопки закрытия. */}
+          <div className="pointer-events-none flex max-w-[min(92vw,42rem)] flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full border border-border/60 bg-background/90 px-4 py-1.5 text-xs shadow-sm backdrop-blur">
             <span className="text-muted-foreground">
               Blank canvas — saved scenes are under Scenes (not this page).
             </span>
-            <Link className="font-medium text-foreground hover:underline" href="/scenes">
+            <Link
+              className="pointer-events-auto font-medium text-foreground hover:underline"
+              href="/scenes"
+            >
               Open saved scenes
             </Link>
+            <button
+              aria-label="Dismiss blank canvas hint"
+              className="pointer-events-auto flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+              onClick={() => setShowBlankHint(false)}
+              type="button"
+            >
+              <X className="h-3 w-3" />
+            </button>
           </div>
         </div>
       )}
