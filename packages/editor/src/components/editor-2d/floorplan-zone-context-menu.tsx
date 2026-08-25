@@ -41,19 +41,24 @@ export function FloorplanZoneContextMenu() {
     setAnchor({ nodeId, x: clientX, y: clientY })
   }, [])
 
-  // Пока меню открыто, выделение комнаты не должно сбрасываться: если оно
-  // очистилось в тот же кадр (обработчики кликов/фокуса), возвращаем
-  // выделение на комнату (только при пустом выделении — выбор другого узла
-  // не трогаем).
+  // Сразу после открытия меню возвращаем выделение комнаты, если оно было
+  // сброшено во время жеста правого клика (pointerdown/pointerup до
+  // contextmenu). Плюс держим его, пока меню открыто.
   useEffect(() => {
     if (!anchor) return
-    const unsub = useViewer.subscribe(() => {
+    const assert = () => {
       const current = useViewer.getState().selection.selectedIds
-      if (current.length === 0) {
+      if (current.length === 0 || !current.includes(anchor.nodeId)) {
         useViewer.getState().setSelection({ selectedIds: [anchor.nodeId] })
       }
-    })
-    return unsub
+    }
+    assert()
+    const timer = window.setTimeout(assert, 0)
+    const unsub = useViewer.subscribe(assert)
+    return () => {
+      window.clearTimeout(timer)
+      unsub()
+    }
   }, [anchor])
 
   // Кликабельная заливка зоны обрабатывает правый клик в registry-слое
