@@ -890,6 +890,10 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
       if (startDirectMoveDrag(id, event)) return
       if (startDirectRotateDrag(id, event)) return
       if (startGroupMoveDrag(id, event)) return
+      // В режиме построения клик по заливке комнаты не должен перехватываться
+      // зоной (иначе стена/трасса внутри комнаты не рисуется) — пропускаем.
+      const node = useScene.getState().nodes[id]
+      if (node?.type === 'zone' && useEditor.getState().mode === 'build') return
       handleSelect(id, event)
     },
     [handleSelect, startDirectMoveDrag, startDirectRotateDrag, startGroupMoveDrag],

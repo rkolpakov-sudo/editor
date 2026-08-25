@@ -1,12 +1,15 @@
 'use client'
 
 import {
+  assignZoneAirflowsToTerminals,
   deriveZoneQuantityReport,
+  recommendEquipment,
   resolveAutoZonePolygon,
   resolveRequiredAirflowM3h,
   SPACE_CATEGORIES,
   SPACE_CATEGORY_LABELS,
   SPACE_CATEGORY_RATES,
+  terminalDirection,
   useLiveNodeOverrides,
   useScene,
   type ZoneNode,
@@ -332,16 +335,50 @@ const EXHAUST_CATEGORIES = new Set([
 
 function VentilationSection({ zone, areaM2 }: { zone: ZoneNode; areaM2: number | null }) {
   const updateNode = useScene((state) => state.updateNode)
+  const nodes = useScene((state) => state.nodes)
   const update = (patch: Partial<ZoneNode>) => updateNode(zone.id, patch)
   const airflow = resolveRequiredAirflowM3h(zone.spaceCategory, { areaM2: areaM2 ?? undefined })
   const isExhaust = EXHAUST_CATEGORIES.has(zone.spaceCategory)
+
+  // Терминалы комнаты и их расходы (единый состав с панелью комнаты).
+  const assignments = useMemo(
+    () => assignZoneAirflowsToTerminals(nodes, [zone]).filter((a) => a.zoneId === zone.id),
+    [nodes, zone],
+  )
+  const terminals = useMemo(
+    () =>
+      assignments.map((assignment) => {
+        const terminal = Object.values(nodes).find(
+          (node) => node?.type === 'duct-terminal' && node.id === assignment.terminalId,
+        )
+        return {
+          id: assignment.terminalId,
+          name: (terminal as { name?: string } | undefined)?.name ?? assignment.terminalId,
+          flowM3h: assignment.flowM3h,
+          isExhaust: terminalDirection(terminal as never) === 'return',
+        }
+      }),
+    [assignments, nodes],
+  )
+  const recommendation = useMemo(() => {
+    const supply = terminals
+      .filter((terminal) => !terminal.isExhaust)
+      .reduce((sum, terminal) => sum + terminal.flowM3h, 0)
+    const exhaust = terminals
+      .filter((terminal) => terminal.isExhaust)
+      .reduce((sum, terminal) => sum + terminal.flowM3h, 0)
+    return recommendEquipment(supply, exhaust)
+  }, [terminals])
 
   return (
     <PanelSection title="Вентиляция · воздухообмен">
       <RoomSelect
         label="Тип помещения"
         onChange={(spaceCategory) =>
-          update({ spaceCategory: spaceCategory as ZoneNode['spaceCategory'] })
+          update({
+            spaceCategory: spaceCategory as ZoneNode['spaceCategory'],
+            name: SPACE_CATEGORY_LABELS[spaceCategory as ZoneNode['spaceCategory']],
+          })
         }
         options={SPACE_CATEGORIES.map((category) => ({
           label: SPACE_CATEGORY_LABELS[category],
@@ -371,6 +408,45 @@ function VentilationSection({ zone, areaM2 }: { zone: ZoneNode; areaM2: number |
         <div className="flex items-center justify-between rounded-md border border-border/50 bg-background/35 px-2.5 py-2 text-xs">
           <span className="text-muted-foreground">Площадь пола</span>
           <span className="font-mono font-medium text-foreground">{areaM2.toFixed(2)} м²</span>
+        </div>
+      )}
+      <div className="rounded-md border border-border/50 bg-background/35 px-2.5 py-2">
+        <span className="text-muted-foreground text-[10px]">Терминалы комнаты</span>
+        {terminals.length === 0 ? (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Решёток/диффузоров нет — добавьте терминалы через каталог MEP.
+          </p>
+        ) : (
+          <div className="mt-1 flex flex-col gap-1">
+            {terminals.map((terminal) => (
+              <div className="flex items-center justify-between text-xs" key={terminal.id}>
+                <span className="text-muted-foreground">
+                  {terminal.isExhaust ? 'Вытяжка' : 'Приток'} · {terminal.name}
+                </span>
+                <span className="font-mono font-medium text-foreground">
+                  {terminal.flowM3h.toFixed(0)} м³/ч
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {recommendation.length > 0 && (
+        <div className="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-2">
+          <span className="text-muted-foreground text-[10px]">Рекомендация оборудования</span>
+          <div className="mt-1 flex flex-col gap-1.5">
+            {recommendation.map((entry) => (
+              <div className="text-xs" key={entry.category}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{entry.label}</span>
+                  <span className="font-mono text-emerald-300">
+                    {entry.flowM3h.toFixed(0)} м³/ч → {entry.nominalM3h}
+                  </span>
+                </div>
+                <p className="text-muted-foreground text-[10px]">{entry.reason}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </PanelSection>

@@ -45,6 +45,9 @@ export function buildZoneFloorplan(node: ZoneNode, ctx: GeometryContext): Floorp
       strokeOpacity: showSelectedChrome ? 0.96 : 0.72,
       strokeLinejoin: 'round',
       vectorEffect: 'non-scaling-stroke',
+      // Заливка кликабельна целиком: левый клик по любому месту комнаты
+      // выбирает зону (открывая единую панель), правый — контекстное меню.
+      pointerEvents: 'all',
     },
   ]
 

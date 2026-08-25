@@ -1,31 +1,11 @@
 'use client'
 
-import {
-  type AnyNodeId,
-  SPACE_CATEGORIES,
-  SPACE_CATEGORY_LABELS,
-  SPACE_CATEGORY_RATES,
-  type SpaceCategory,
-  useScene,
-  type ZoneNode,
-} from '@pascal-app/core'
+import { type AnyNodeId, useScene, type ZoneNode } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { clientToPlan } from '../../lib/floorplan/plan-coords'
-import { floorplanEmitter } from '../../lib/floorplan-events'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '../ui/primitives/dropdown-menu'
+import { DropdownMenu, DropdownMenuTrigger } from '../ui/primitives/dropdown-menu'
+import { RoomUnifiedPanel } from './room-unified-panel'
 
 type MenuAnchor = { nodeId: AnyNodeId; x: number; y: number }
 
@@ -48,64 +28,65 @@ function pointInPolygon(
 }
 
 /**
- * Right-click menu for room zones on the 2D floor plan (MEP stage A3).
- * Opens at the cursor over any zone — auto-detected rooms and manual ones
- * alike — and reclassifies the room per СП 54 via the «Тип помещения»
- * submenu. Right-click works anywhere inside the room: the registry entry
- * covers the label/stroke, and a document-level fallback hit-tests the zone
- * polygon for clicks on the (non-interactive) fill so drawing walls inside
- * a room keeps working.
+ * Единый инструмент комнаты (UX-объединение): открывается левым или правым
+ * кликом по любому месту помещения на 2D-плане и показывает все
+ * характеристики — имя, тип по СП 54, воздухообмен, площадь/высоту, терминалы
+ * с расходами и рекомендацию оборудования. Заменяет разрозненные меню
+ * (контекстное «Тип помещения» + инспектор зоны) одним.
  */
 export function FloorplanZoneContextMenu() {
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null)
   const node = useScene((state) => (anchor ? state.nodes[anchor.nodeId] : undefined))
 
-  useEffect(() => {
-    const open = (event: { nodeId: AnyNodeId; clientX: number; clientY: number }) => {
-      setAnchor({ nodeId: event.nodeId, x: event.clientX, y: event.clientY })
-    }
-    floorplanEmitter.on('floorplan:node-context-menu', open)
-    return () => floorplanEmitter.off('floorplan:node-context-menu', open)
+  const openForZone = useCallback((nodeId: AnyNodeId, clientX: number, clientY: number) => {
+    setAnchor({ nodeId, x: clientX, y: clientY })
   }, [])
 
-  // Fallback: правый клик по заливке помещения (не по подписи/контуру, которые
-  // обрабатывает registry-слой) — находим зону по точке и открываем меню.
   useEffect(() => {
-    const onContextMenu = (event: MouseEvent) => {
-      if (!(event.target instanceof Element)) return
-      if (!event.target.closest('g[data-floorplan-scene]')) return
+    const hitTestRoom = (event: MouseEvent): boolean => {
+      // Клик должен быть по площади плана (внутри его SVG), а не по панели/меню.
+      const target = event.target instanceof Element ? event.target : null
+      const sceneGroup = document.querySelector<SVGGElement>('g[data-floorplan-scene]')
+      if (!sceneGroup?.ownerSVGElement?.contains(target)) return false
       const planPoint = clientToPlan(event.clientX, event.clientY)
-      if (!planPoint) return
+      if (!planPoint) return false
       const nodes = useScene.getState().nodes
       for (const candidate of Object.values(nodes)) {
         if (candidate?.type !== 'zone') continue
         const zone = candidate as ZoneNode
+        if (zone.spaceRole !== 'room') continue
         if (!pointInPolygon(planPoint[0], planPoint[1], zone.polygon)) continue
-        event.preventDefault()
-        event.stopPropagation()
         useViewer.getState().setSelection({ selectedIds: [zone.id] })
-        floorplanEmitter.emit('floorplan:node-context-menu', {
-          nodeId: zone.id,
-          clientX: event.clientX,
-          clientY: event.clientY,
-        })
-        return
+        openForZone(zone.id, event.clientX, event.clientY)
+        return true
       }
+      return false
+    }
+
+    // Правый клик по комнате — единая панель (глобальный fallback для заливки).
+    const onContextMenu = (event: MouseEvent) => {
+      if (!hitTestRoom(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    // Левый клик по комнате — тоже единая панель. Срабатывает только когда
+    // клик не перехватил элемент поверх (стена/плита/терминал): их обработчики
+    // останавливают всплытие, поэтому до document клик не доходит.
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return
+      if (!hitTestRoom(event)) return
+      event.preventDefault()
+      event.stopPropagation()
     }
     document.addEventListener('contextmenu', onContextMenu)
-    return () => document.removeEventListener('contextmenu', onContextMenu)
-  }, [])
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('contextmenu', onContextMenu)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [openForZone])
 
   if (!anchor || !node || node.type !== 'zone') return null
-  const zone = node as ZoneNode
-
-  const reclassify = (category: string) => {
-    // Тип помещения становится наименованием комнаты (русское, из СП 54).
-    useScene.getState().updateNode(zone.id, {
-      spaceCategory: category as SpaceCategory,
-      name: SPACE_CATEGORY_LABELS[category as SpaceCategory],
-    })
-  }
 
   return (
     <DropdownMenu open onOpenChange={(open) => !open && setAnchor(null)}>
@@ -114,26 +95,7 @@ export function FloorplanZoneContextMenu() {
         className="fixed h-px w-px"
         style={{ left: anchor.x, top: anchor.y }}
       />
-      <DropdownMenuContent
-        className="min-w-56"
-        onCloseAutoFocus={(event) => event.preventDefault()}
-      >
-        <DropdownMenuLabel>{zone.name}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Тип помещения</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={zone.spaceCategory} onValueChange={reclassify}>
-              {SPACE_CATEGORIES.map((category) => (
-                <DropdownMenuRadioItem key={category} value={category}>
-                  {SPACE_CATEGORY_LABELS[category]}
-                  <DropdownMenuShortcut>{SPACE_CATEGORY_RATES[category]}</DropdownMenuShortcut>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-      </DropdownMenuContent>
+      <RoomUnifiedPanel zone={node as ZoneNode} />
     </DropdownMenu>
   )
 }
