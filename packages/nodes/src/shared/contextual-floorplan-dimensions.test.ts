@@ -281,7 +281,7 @@ describe('contextual floor-plan dimensions', () => {
       kind: 'dimension-label',
       cx: 2,
       cy: 1.5,
-      text: '12.0m²',
+      text: '12,0 м²',
     })
   })
 

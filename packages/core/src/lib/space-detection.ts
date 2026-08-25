@@ -882,7 +882,9 @@ function nextAutoRoomName(
   let maxIndex = 0
 
   for (const node of nodes) {
-    const match = /^Room\s+(\d+)(?:\s+(?:Slab|Ceiling))?$/i.exec((node.name ?? '').trim())
+    const match = /^(?:Room|Помещение)\s+(\d+)(?:\s+(?:Slab|Ceiling))?$/i.exec(
+      (node.name ?? '').trim(),
+    )
     if (!match) continue
     const index = Number(match[1])
     if (Number.isFinite(index)) {
@@ -893,14 +895,14 @@ function nextAutoRoomName(
   return `Room ${maxIndex + 1} ${suffix}`
 }
 
-// Auto-detected rooms name themselves on the same "Room N" series as the
+// Auto-detected rooms name themselves on the same "Помещение N" series as the
 // auto slabs/ceilings they share a footprint with (a zone IS the room, so no
-// extra suffix).
+// extra suffix). Legacy "Room N" names are still recognised for continuity.
 function nextAutoZoneName(nodes: Array<{ name?: string }>) {
   let maxIndex = 0
 
   for (const node of nodes) {
-    const match = /^Room\s+(\d+)$/i.exec((node.name ?? '').trim())
+    const match = /^(?:Room|Помещение)\s+(\d+)$/i.exec((node.name ?? '').trim())
     if (!match) continue
     const index = Number(match[1])
     if (Number.isFinite(index)) {
@@ -908,7 +910,7 @@ function nextAutoZoneName(nodes: Array<{ name?: string }>) {
     }
   }
 
-  return `Room ${maxIndex + 1}`
+  return `Помещение ${maxIndex + 1}`
 }
 
 function sameTuplePolygon(current: Array<[number, number]>, next: Array<[number, number]>) {

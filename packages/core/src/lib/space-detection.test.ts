@@ -2290,7 +2290,7 @@ describe('procedural zones', () => {
     expect(plan.delete).toHaveLength(0)
 
     const zone = plan.create[0]
-    expect(zone?.name).toBe('Room 1')
+    expect(zone?.name).toBe('Помещение 1')
     expect(zone?.spaceRole).toBe('room')
     expect(zone?.spaceCategory).toBe('public')
     expect(zone?.autoFromWalls).toBe(true)
@@ -2300,11 +2300,13 @@ describe('procedural zones', () => {
 
   test('names two identical rooms without collision', () => {
     // Two rooms share the exact same polygon signature — both must still be
-    // created with distinct names instead of colliding on "Room 1".
+    // created with distinct names instead of colliding on "Помещение 1".
     const plan = planAutoZonesForLevel([squareSpace(), squareSpace()], [])
 
     expect(plan.create).toHaveLength(2)
-    expect(new Set(plan.create.map((zone) => zone.name))).toEqual(new Set(['Room 1', 'Room 2']))
+    expect(new Set(plan.create.map((zone) => zone.name))).toEqual(
+      new Set(['Помещение 1', 'Помещение 2']),
+    )
   })
 
   test('deletes an auto zone when its enclosing contour opens', () => {

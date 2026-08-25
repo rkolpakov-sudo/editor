@@ -21,9 +21,21 @@ export function buildZoneContextualDimensions(
     appearance: 'outlined',
     cx: centroid[0],
     cy: centroid[1],
-    text: formatAreaLabel(area, ctx.viewState?.unit ?? 'metric', 1),
+    text: formatAreaLabelRu(area, ctx.viewState?.unit ?? 'metric', 1),
     angle: 0,
   }
+}
+
+/** Площадь по-русски: 12 → «12,0 м²» (имперская остаётся на общем форматтере). */
+function formatAreaLabelRu(
+  squareMeters: number,
+  unit: 'metric' | 'imperial',
+  fractionDigits = 1,
+): string {
+  if (unit !== 'metric') return formatAreaLabel(squareMeters, unit, fractionDigits)
+  if (!Number.isFinite(squareMeters)) return '--'
+  const value = squareMeters.toFixed(fractionDigits).replace('.', ',')
+  return `${value} м²`
 }
 
 function polygonAreaAndCentroid(points: readonly FloorplanPoint[]): {

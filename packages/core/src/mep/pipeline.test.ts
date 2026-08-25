@@ -122,7 +122,7 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     expect(plan.delete).toHaveLength(0)
 
     const zone = plan.create[0]!
-    expect(zone.name).toBe('Room 1')
+    expect(zone.name).toBe('Помещение 1')
     expect(zone.spaceRole).toBe('room')
     expect(zone.spaceCategory).toBe('public')
     expect(zone.autoFromWalls).toBe(true)

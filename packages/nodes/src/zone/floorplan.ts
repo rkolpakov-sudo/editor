@@ -6,10 +6,6 @@ import {
   type ZoneNode,
 } from '@pascal-app/core'
 import { floorplanGeometryMetadata, readFloorplanContext } from '@pascal-app/editor'
-import {
-  type ConstructionLengthProfile,
-  formatConstructionLength,
-} from '../shared/construction-length'
 import { buildRoomClearDimensions } from './room-clear-dimensions'
 
 /**
@@ -102,17 +98,7 @@ export function buildZoneFloorplan(node: ZoneNode, ctx: GeometryContext): Floorp
   const [cx, cy] = polygonCentroid(ring)
   const name = node.name?.trim()
   if (isRoom) {
-    children.push(
-      ...buildRoomLabels(
-        node,
-        cx,
-        cy,
-        view?.unit ?? 'metric',
-        floorplanContext.purpose === 'document' ? 'document' : 'editor',
-        floorplanContext.metricNotation,
-        stroke,
-      ),
-    )
+    children.push(...buildRoomLabels(node, cx, cy, stroke))
     if (floorplanContext.automaticDimensions) {
       children.push(...buildRoomClearDimensions(node, ctx))
     }
@@ -147,15 +133,7 @@ const ROOM_NUMBER_FONT_SIZE = 0.16
 const ROOM_DETAIL_FONT_SIZE = 0.11
 const ROOM_LABEL_LINE_SPACING = 0.18
 
-function buildRoomLabels(
-  node: ZoneNode,
-  x: number,
-  y: number,
-  unit: 'metric' | 'imperial',
-  profile: ConstructionLengthProfile,
-  metricNotation: 'meters' | 'millimeters',
-  color: string,
-): FloorplanGeometry[] {
+function buildRoomLabels(node: ZoneNode, x: number, y: number, color: string): FloorplanGeometry[] {
   const lines: Array<{ text: string; fontSize: number; fontWeight: number }> = []
   const name = node.name.trim()
   if (name) lines.push({ text: name, fontSize: ROOM_NAME_FONT_SIZE, fontWeight: 700 })
@@ -164,17 +142,15 @@ function buildRoomLabels(
   }
 
   const finishes = [
-    node.floorFinish ? `FL: ${node.floorFinish}` : '',
-    node.wallFinish ? `WL: ${node.wallFinish}` : '',
-    node.ceilingFinish ? `CL: ${node.ceilingFinish}` : '',
+    node.floorFinish ? `Пол: ${node.floorFinish}` : '',
+    node.wallFinish ? `Стены: ${node.wallFinish}` : '',
+    node.ceilingFinish ? `Потолок: ${node.ceilingFinish}` : '',
   ].filter(Boolean)
   if (finishes.length > 0) {
     lines.push({ text: finishes.join(' · '), fontSize: ROOM_DETAIL_FONT_SIZE, fontWeight: 500 })
   }
 
-  const roomDetails = [
-    `CH: ${formatConstructionLength(node.ceilingHeight, unit, profile, { metricNotation })}`,
-  ]
+  const roomDetails = [`Потолок: ${formatHeightRu(node.ceilingHeight)}`]
   if (node.occupancy) roomDetails.push(node.occupancy)
   lines.push({ text: roomDetails.join(' · '), fontSize: ROOM_DETAIL_FONT_SIZE, fontWeight: 500 })
 
@@ -196,6 +172,12 @@ function buildRoomLabels(
     upright: true,
     metadata: floorplanGeometryMetadata({ annotationRole: 'room-label' }),
   }))
+}
+
+/** Высота в метрах по-русски: 2.7 → «2,7 м». */
+function formatHeightRu(meters: number): string {
+  const value = Number.parseFloat(meters.toFixed(2))
+  return `${String(value).replace('.', ',')} м`
 }
 
 /**
