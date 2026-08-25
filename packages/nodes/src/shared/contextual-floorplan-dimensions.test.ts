@@ -1,18 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  DoorNode,
-  type GeometryContext,
-  ItemNode,
-  WallNode,
-  WindowNode,
-  ZoneNode,
-} from '@pascal-app/core'
+import { DoorNode, type GeometryContext, ItemNode, WallNode, WindowNode } from '@pascal-app/core'
 import { createFloorplanContextExtensions } from '@pascal-app/editor'
 import { buildDoorContextualDimensions } from '../door/contextual-dimensions'
 import { buildItemContextualDimensions } from '../item/floorplan'
 import { buildWallContextualDimensions } from '../wall/contextual-dimensions'
 import { buildWindowContextualDimensions } from '../window/contextual-dimensions'
-import { buildZoneContextualDimensions } from '../zone/contextual-dimensions'
 
 function context(
   parent: GeometryContext['parent'] = null,
@@ -262,27 +254,6 @@ describe('contextual floor-plan dimensions', () => {
     expect(
       geometry?.kind === 'dimension-string' ? geometry.segments.map((segment) => segment.text) : [],
     ).toEqual(['2.4m', '1m', '2.4m'])
-  })
-
-  test('shows room area at the polygon centroid', () => {
-    const room = ZoneNode.parse({
-      id: 'zone_room',
-      name: 'Office',
-      polygon: [
-        [0, 0],
-        [4, 0],
-        [4, 3],
-        [0, 3],
-      ],
-      spaceRole: 'room',
-    })
-
-    expect(buildZoneContextualDimensions(room, context())).toMatchObject({
-      kind: 'dimension-label',
-      cx: 2,
-      cy: 1.5,
-      text: '12,0 м²',
-    })
   })
 
   test('shows item width and depth without placement chains', () => {

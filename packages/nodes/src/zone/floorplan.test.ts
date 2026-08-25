@@ -58,6 +58,7 @@ describe('buildZoneFloorplan room documentation', () => {
       '101',
       'Пол: Timber · Стены: Paint · Потолок: ACT',
       'Потолок: 2,7 м · Business',
+      'Площадь: 12,0 м²',
     ])
     expect(labels.every((label) => label.kind === 'text' && label.upright)).toBe(true)
     expect(

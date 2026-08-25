@@ -5,7 +5,6 @@ import {
 } from '@pascal-app/core'
 import type { FloorplanNodeExtension } from '@pascal-app/editor'
 import { polygonMeasurementFeatures } from '../shared/polygon-measurement'
-import { buildZoneContextualDimensions } from './contextual-dimensions'
 import { buildZoneFloorplan } from './floorplan'
 import {
   zoneAddVertexAffordance,
@@ -33,7 +32,9 @@ export const zoneDefinition: NodeDefinition<typeof ZoneNode> = {
   category: 'site',
   extensions: {
     'pascal:editor/floorplan': {
-      contextualDimensions: buildZoneContextualDimensions,
+      // Площадь комнаты показывается всегда в подписи помещения
+      // (buildRoomLabels в floorplan.ts) — отдельные контекстные размеры
+      // зоне не нужны.
       schedule: buildRoomFloorplanSchedule,
     } satisfies FloorplanNodeExtension<ZoneNode>,
   },

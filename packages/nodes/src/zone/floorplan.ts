@@ -98,7 +98,7 @@ export function buildZoneFloorplan(node: ZoneNode, ctx: GeometryContext): Floorp
   const [cx, cy] = polygonCentroid(ring)
   const name = node.name?.trim()
   if (isRoom) {
-    children.push(...buildRoomLabels(node, cx, cy, stroke))
+    children.push(...buildRoomLabels(node, cx, cy, stroke, polygonArea(ring)))
     if (floorplanContext.automaticDimensions) {
       children.push(...buildRoomClearDimensions(node, ctx))
     }
@@ -133,7 +133,13 @@ const ROOM_NUMBER_FONT_SIZE = 0.16
 const ROOM_DETAIL_FONT_SIZE = 0.11
 const ROOM_LABEL_LINE_SPACING = 0.18
 
-function buildRoomLabels(node: ZoneNode, x: number, y: number, color: string): FloorplanGeometry[] {
+function buildRoomLabels(
+  node: ZoneNode,
+  x: number,
+  y: number,
+  color: string,
+  areaM2: number,
+): FloorplanGeometry[] {
   const lines: Array<{ text: string; fontSize: number; fontWeight: number }> = []
   const name = node.name.trim()
   if (name) lines.push({ text: name, fontSize: ROOM_NAME_FONT_SIZE, fontWeight: 700 })
@@ -153,6 +159,13 @@ function buildRoomLabels(node: ZoneNode, x: number, y: number, color: string): F
   const roomDetails = [`Потолок: ${formatHeightRu(node.ceilingHeight)}`]
   if (node.occupancy) roomDetails.push(node.occupancy)
   lines.push({ text: roomDetails.join(' · '), fontSize: ROOM_DETAIL_FONT_SIZE, fontWeight: 500 })
+  if (areaM2 > 1e-6) {
+    lines.push({
+      text: `Площадь: ${formatAreaRu(areaM2)}`,
+      fontSize: ROOM_DETAIL_FONT_SIZE,
+      fontWeight: 500,
+    })
+  }
 
   const startY = y - ((lines.length - 1) * ROOM_LABEL_LINE_SPACING) / 2
   return lines.map((line, index) => ({
@@ -178,6 +191,23 @@ function buildRoomLabels(node: ZoneNode, x: number, y: number, color: string): F
 function formatHeightRu(meters: number): string {
   const value = Number.parseFloat(meters.toFixed(2))
   return `${String(value).replace('.', ',')} м`
+}
+
+/** Площадь в м² по-русски: 12 → «12,0 м²». */
+function formatAreaRu(squareMeters: number): string {
+  const value = squareMeters.toFixed(1).replace('.', ',')
+  return `${value} м²`
+}
+
+/** Площадь простого многоугольника (формула Гаусса), м². */
+function polygonArea(ring: ReadonlyArray<readonly [number, number]>): number {
+  let twiceSignedArea = 0
+  for (let i = 0; i < ring.length; i++) {
+    const [x0, y0] = ring[i]!
+    const [x1, y1] = ring[(i + 1) % ring.length]!
+    twiceSignedArea += x0 * y1 - x1 * y0
+  }
+  return Math.abs(twiceSignedArea) / 2
 }
 
 /**
