@@ -10,6 +10,8 @@ import {
   ZoneNode,
 } from '../schema'
 import { ductSectionAreaM2, pressureDropPa, velocityMps } from './aerodynamics'
+import { buildDuctPlan } from './agent/build-plan'
+import { planBuildMutations } from './agent/materialize'
 import { assignZoneAirflowsToTerminals, computeZoneAirflows, terminalFlowMap } from './air-exchange'
 import {
   buildBypassMutations,
@@ -19,7 +21,7 @@ import {
   planAllBypassRuns,
 } from './bypass'
 import { resolveRequiredAirflowM3h } from './constants'
-import { registerDuctNetworkStubs } from './duct-network-stubs'
+import { ductTerminal, hvacUnit, registerDuctNetworkStubs } from './duct-network-stubs'
 import { ductsToDxf } from './dxf'
 import { ductSegmentLengthM, planSystemMarkings } from './gost-segmentation'
 import { computeNetworkFlows } from './network-flows'
@@ -47,6 +49,19 @@ function roomWalls(): WallNode[] {
     WallNode.parse({ id: 'wall_b' as AnyNodeId, start: [6, 0], end: [6, 4], height: 2.6 }),
     WallNode.parse({ id: 'wall_c' as AnyNodeId, start: [6, 4], end: [0, 4], height: 2.6 }),
     WallNode.parse({ id: 'wall_d' as AnyNodeId, start: [0, 4], end: [0, 0], height: 2.6 }),
+  ]
+}
+
+/** Два смежных помещения с общей стеной: кухня [0,5]×[0,4] и жилая [5,12]×[0,4]. */
+function twoRoomWalls(): WallNode[] {
+  return [
+    WallNode.parse({ id: 'wall_a' as AnyNodeId, start: [0, 0], end: [5, 0], height: 2.6 }),
+    WallNode.parse({ id: 'wall_b' as AnyNodeId, start: [5, 0], end: [5, 4], height: 2.6 }),
+    WallNode.parse({ id: 'wall_c' as AnyNodeId, start: [5, 4], end: [0, 4], height: 2.6 }),
+    WallNode.parse({ id: 'wall_d' as AnyNodeId, start: [0, 4], end: [0, 0], height: 2.6 }),
+    WallNode.parse({ id: 'wall_e' as AnyNodeId, start: [5, 0], end: [12, 0], height: 2.6 }),
+    WallNode.parse({ id: 'wall_f' as AnyNodeId, start: [12, 0], end: [12, 4], height: 2.6 }),
+    WallNode.parse({ id: 'wall_g' as AnyNodeId, start: [12, 4], end: [5, 4], height: 2.6 }),
   ]
 }
 
@@ -560,5 +575,155 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     // C4: отметки оси/низа на слое MEP_ELEVATION у трасс.
     expect(dxf).toContain('MEP_ELEVATION')
     expect(dxf).toContain('низ ')
+  })
+
+  test('Этап D (агент): комната → тип помещения → терминалы + установка → эскиз П/В → «Трассировка» → сеть → спецификация + DXF', () => {
+    // 1) План: два помещения с общей стеной → две авто-зоны.
+    const walls = twoRoomWalls()
+    const { spaces } = detectSpacesForLevel('level-1', walls)
+    expect(spaces).toHaveLength(2)
+    const zonePlan = planAutoZonesForLevel(spaces, [])
+    expect(zonePlan.create).toHaveLength(2)
+
+    // 2) «Контекстное меню»: тип помещения по СП 54 (кухня-газ / жилая).
+    const zones = zonePlan.create.map((partial) => {
+      const isKitchen = partial.boundaryWallIds.includes('wall_a')
+      return ZoneNode.parse({ ...partial, spaceCategory: isKitchen ? 'kitchen_gas' : 'living' })
+    })
+    const airflows = computeZoneAirflows(zones)
+    const kitchen = airflows.find((a) => a.spaceCategory === 'kitchen_gas')!
+    const living = airflows.find((a) => a.spaceCategory === 'living')!
+    expect(kitchen.requiredFlowM3h).toBe(90)
+    expect(kitchen.direction).toBe('exhaust')
+    expect(living.requiredFlowM3h).toBe(84) // 28 м² × 3 м³/ч
+    expect(living.direction).toBe('supply')
+
+    // 3) Терминалы и установка (как их расставляет пользователь).
+    const grille = ductTerminal([4, 2.6, 3.5], 'return-grille')
+    const diffuser = ductTerminal([7, 2.6, 1.5], 'diffuser')
+    const equipment = hvacUnit([2, 2.6, 0.5])
+    const scene = sceneOf(...zones, grille, diffuser, equipment)
+
+    // 4) Расходы из зон → ближайшие совместимые терминалы (СП 54).
+    const assignments = assignZoneAirflowsToTerminals(scene, zones)
+    expect(assignments).toHaveLength(2)
+    const terminalFlows = terminalFlowMap(assignments)
+    expect(terminalFlows[grille.id]).toBe(90)
+    expect(terminalFlows[diffuser.id]).toBe(84)
+
+    // 5) Эскиз П и В полилиниями: П из установки к диффузору, В из решётки
+    //    к установке; П и В пересекаются в точке (4; 1.5).
+    const plan = buildDuctPlan({
+      sketch: {
+        runs: [
+          {
+            system: 'supply',
+            points: [
+              { x: 2, z: 0.5, elev: 'auto' },
+              { x: 2, z: 1.5, elev: 'auto' },
+              { x: 7, z: 1.5, elev: 'auto' },
+            ],
+          },
+          {
+            system: 'exhaust',
+            points: [
+              { x: 4, z: 3.5, elev: 'auto' },
+              { x: 4, z: 1, elev: 'auto' },
+              { x: 2.4, z: 0.5, elev: 'auto' },
+            ],
+          },
+        ],
+      },
+      nodes: scene,
+      terminalFlows,
+    })
+
+    // 6) План строится без блокеров: сечения по СП 60, высоты, утка-решение.
+    expect(plan.canBuild).toBe(true)
+    expect(plan.blockers).toEqual([])
+    expect(plan.violations).toEqual([])
+    const supplyRun = plan.runs.find((r) => r.system === 'supply')!
+    const exhaustRun = plan.runs.find((r) => r.system === 'exhaust')!
+    expect(supplyRun.flowM3h).toBeCloseTo(84, 9)
+    expect(exhaustRun.flowM3h).toBeCloseTo(90, 9)
+    // Сечение по СП 60 (скоростной метод): совпадает со справочным подбором.
+    expect(supplyRun.profile).toEqual({ shape: 'round', diameterMm: 100 })
+    expect(exhaustRun.profile).toEqual({ shape: 'round', diameterMm: 100 })
+    const refSupply = sizeDuctSection({ flowM3h: 84, system: 'supply', hoursBand: 'lt2000' })
+    const refExhaust = sizeDuctSection({ flowM3h: 90, system: 'exhaust', hoursBand: 'lt2000' })
+    expect(supplyRun.velocityMps).toBeCloseTo(refSupply!.velocityMps, 5)
+    expect(exhaustRun.velocityMps).toBeCloseTo(refExhaust!.velocityMps, 5)
+    expect(exhaustRun.velocityMps).toBeGreaterThanOrEqual(refExhaust!.recommendedVelocity.min)
+    expect(exhaustRun.velocityMps).toBeLessThanOrEqual(refExhaust!.recommendedVelocity.max)
+    // Высоты «как в Revit»: auto = потолок 2.7 − зазор 0.05 − H/2 (Ø100 → 0.05).
+    for (const axis of [...supplyRun.axisM, ...exhaustRun.axisM]) {
+      expect(axis).toBeCloseTo(2.6, 6)
+    }
+    // Решения: два отвода на изгибах, утка на пересечении, баланс П/В.
+    expect(plan.fittings.filter((f) => f.fittingType === 'elbow')).toHaveLength(2)
+    expect(plan.solutions.some((note) => note.includes('Утка:'))).toBe(true)
+    expect(plan.solutions.some((note) => note.includes('Баланс П/В'))).toBe(true)
+
+    // 7) Материализация (одна undo-команда): 4 звена + 2 отвода Ø100.
+    const mutations = planBuildMutations(plan, {})
+    const built: Record<AnyNodeId, AnyNode> = { ...scene }
+    for (const { node } of mutations.create) built[node.id] = node
+    const segments = Object.values(built).filter(
+      (node): node is DuctSegmentNode => node.type === 'duct-segment',
+    )
+    const fittings = Object.values(built).filter(
+      (node): node is DuctFittingNode => node.type === 'duct-fitting',
+    )
+    expect(segments).toHaveLength(4)
+    expect(fittings).toHaveLength(2)
+    expect(fittings.every((f) => f.fittingType === 'elbow' && f.diameter === 100)).toBe(true)
+    // Звенья лежат на рассчитанной оси 2,6 м над полом уровня.
+    for (const segment of segments) {
+      for (const point of segment.path) expect(point[1]).toBeCloseTo(2.6, 6)
+    }
+
+    // 8) Утка: пересечение П/В материализуется обводом, конфликт снимается.
+    const crossings = detectBypassCrossings(built)
+    expect(crossings).toHaveLength(1)
+    expect(crossings[0]!.point[0]).toBeCloseTo(4, 5)
+    expect(crossings[0]!.point[1]).toBeCloseTo(1.5, 5)
+    const bypassRuns = planAllBypassRuns(built)
+    expect(bypassRuns[0]!.bypasses).toHaveLength(1)
+    expect(bypassRuns[0]!.skipped).toHaveLength(0)
+    const exhaustHost = built[bypassRuns[0]!.exhaustNodeId] as DuctSegmentNode
+    const bypass = buildBypassRunMutations(bypassRuns[0]!, exhaustHost)
+    built[exhaustHost.id] = { ...exhaustHost, path: bypass.beforePath } as DuctSegmentNode
+    for (const piece of [...bypass.intermediateSegments, bypass.afterSegment]) {
+      built[piece.id] = piece
+    }
+    for (const fitting of bypass.fittings) built[fitting.id] = fitting
+    expect(detectBypassCrossings(built)).toHaveLength(0)
+
+    // 9) Спецификация v2: П/В, отводы + утка, отметки оси/низа (C4), гильзы.
+    const spec = buildDuctSpecification(built, { walls, markings: planSystemMarkings(built) })
+    const supplyRow = spec.systems.find((row) => row.system === 'supply')!
+    const exhaustRow = spec.systems.find((row) => row.system === 'exhaust')!
+    expect(supplyRow.lengthM).toBeGreaterThan(0)
+    expect(exhaustRow.lengthM).toBeGreaterThan(0)
+    expect(supplyRow.marking).toMatch(/^П\d+$/)
+    expect(exhaustRow.marking).toMatch(/^В\d+$/)
+    const elbowRows = spec.sections.fittings.filter((row) => row.name.includes('Отвод'))
+    expect(elbowRows).toHaveLength(2)
+    expect(spec.sections.fittings.some((row) => row.name.includes('Утка'))).toBe(true)
+    const ductRows = spec.sections.ducts.filter((row) => row.unit === 'м')
+    for (const row of ductRows) {
+      expect(row.size).toBe('Ø100')
+      expect(row.elevation).toBe('ось 2,600 · низ 2,550')
+    }
+    expect(spec.totals.fittings).toBeGreaterThanOrEqual(3)
+    expect(spec.totals.sleeves).toBeGreaterThanOrEqual(1)
+
+    // 10) DXF v2: маркировка, утка, легенда и отметки уровня (C4).
+    const dxf = ductsToDxf(built, { walls, markings: planSystemMarkings(built) })
+    expect(dxf).toContain('Утка')
+    expect(dxf).toContain('Системы')
+    expect(dxf).toContain('MEP_ELEVATION')
+    expect(dxf).toContain('1\n2,600')
+    expect(dxf).toContain('низ 2,550')
   })
 })
