@@ -11,6 +11,7 @@ import {
   ductsToDxf,
   planAllBypasses,
   planSystemMarkings,
+  recommendEquipment,
   sizeDuctNetworks,
   sizedProfiles,
   specificationToCsv,
@@ -24,6 +25,7 @@ import {
   Check,
   ClipboardList,
   Download,
+  Fan,
   Map as MapIcon,
   Wind,
   X,
@@ -321,6 +323,21 @@ function VentilationContent() {
     () => Object.values(nodes).filter((node): node is WallNode => node?.type === 'wall'),
     [nodes],
   )
+  // C2: рекомендация оборудования по потребностям П/В из зон (до трассировки).
+  const equipmentRecommendation = useMemo(() => {
+    const zones = Object.values(nodes).filter(
+      (node): node is ZoneNode => node?.type === 'zone' && node.spaceRole === 'room',
+    )
+    const airflows = computeZoneAirflows(zones)
+    let supply = 0
+    let exhaust = 0
+    for (const airflow of airflows) {
+      const flow = airflow.requiredFlowM3h ?? 0
+      if (airflow.direction === 'supply') supply += flow
+      else exhaust += flow
+    }
+    return recommendEquipment(supply, exhaust)
+  }, [nodes])
   const specification = useMemo(
     () => buildDuctSpecification(nodes, { markings, sizing }),
     [nodes, markings, sizing],
@@ -555,6 +572,49 @@ function VentilationContent() {
                 )}
               </div>
             )}
+
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-2.5">
+              <div className="flex items-center gap-2">
+                <Fan className="h-3.5 w-3.5 text-emerald-300" />
+                <p className="font-medium text-xs">Рекомендация оборудования</p>
+              </div>
+              {equipmentRecommendation.length === 0 ? (
+                <p className="mt-1.5 text-[10px] text-muted-foreground">
+                  Назначьте тип помещения зонам (СП 54) — рекомендация появится по воздухообмену.
+                </p>
+              ) : (
+                <div className="mt-1.5 space-y-2">
+                  {equipmentRecommendation.map((recommendation) => (
+                    <div
+                      className="rounded-lg border border-border/40 bg-background/60 px-2.5 py-2"
+                      key={recommendation.category}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-xs">{recommendation.label}</span>
+                        <span className="font-mono text-[10px] text-emerald-300">
+                          {recommendation.flowM3h.toFixed(0)} м³/ч → {recommendation.nominalM3h}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {recommendation.reason}
+                      </p>
+                      {recommendation.notes.length > 0 && (
+                        <ul className="mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                          {recommendation.notes.map((note) => (
+                            <li key={note}>· {note}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {recommendation.references.length > 0 && (
+                        <p className="mt-1 text-[9px] text-muted-foreground/60">
+                          {recommendation.references.join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-2.5">
               <div className="flex items-center justify-between gap-2">
