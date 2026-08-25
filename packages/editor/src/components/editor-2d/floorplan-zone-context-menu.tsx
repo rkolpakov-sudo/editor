@@ -4,6 +4,7 @@ import { type AnyNodeId, useScene, type ZoneNode } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { useCallback, useEffect, useState } from 'react'
 import { clientToPlan } from '../../lib/floorplan/plan-coords'
+import { floorplanEmitter } from '../../lib/floorplan-events'
 import { DropdownMenu, DropdownMenuTrigger } from '../ui/primitives/dropdown-menu'
 import { RoomUnifiedPanel } from './room-unified-panel'
 
@@ -28,11 +29,11 @@ function pointInPolygon(
 }
 
 /**
- * Единый инструмент комнаты (UX-объединение): открывается левым или правым
- * кликом по любому месту помещения на 2D-плане и показывает все
- * характеристики — имя, тип по СП 54, воздухообмен, площадь/высоту, терминалы
- * с расходами и рекомендацию оборудования. Заменяет разрозненные меню
- * (контекстное «Тип помещения» + инспектор зоны) одним.
+ * Единое контекстное меню комнаты (правая кнопка). Левая кнопка остаётся
+ * стандартным выделением: клик по комнате выбирает зону и открывает
+ * инспектор-панель справа с теми же характеристиками (имя, тип по СП 54,
+ * воздухообмен, площадь/высоту, терминалы, рекомендацию оборудования) —
+ * два разрозненных меню объединены в одно содержимое.
  */
 export function FloorplanZoneContextMenu() {
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null)
@@ -42,48 +43,44 @@ export function FloorplanZoneContextMenu() {
     setAnchor({ nodeId, x: clientX, y: clientY })
   }, [])
 
+  // Кликабельная заливка зоны обрабатывает правый клик в registry-слое
+  // (эмитит floorplan:node-context-menu) — открываем по нему панель.
   useEffect(() => {
-    const hitTestRoom = (event: MouseEvent): boolean => {
-      // Клик должен быть по площади плана (внутри его SVG), а не по панели/меню.
-      const target = event.target instanceof Element ? event.target : null
-      const sceneGroup = document.querySelector<SVGGElement>('g[data-floorplan-scene]')
-      if (!sceneGroup?.ownerSVGElement?.contains(target)) return false
+    const open = (event: { nodeId: AnyNodeId; clientX: number; clientY: number }) => {
+      setAnchor({ nodeId: event.nodeId, x: event.clientX, y: event.clientY })
+    }
+    floorplanEmitter.on('floorplan:node-context-menu', open)
+    return () => floorplanEmitter.off('floorplan:node-context-menu', open)
+  }, [])
+
+  useEffect(() => {
+    // Правая кнопка по комнате — единое контекстное меню у курсора.
+    const onContextMenu = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return
+      if (
+        !document
+          .querySelector<SVGGElement>('g[data-floorplan-scene]')
+          ?.ownerSVGElement?.contains(event.target)
+      ) {
+        return
+      }
       const planPoint = clientToPlan(event.clientX, event.clientY)
-      if (!planPoint) return false
+      if (!planPoint) return
       const nodes = useScene.getState().nodes
       for (const candidate of Object.values(nodes)) {
         if (candidate?.type !== 'zone') continue
         const zone = candidate as ZoneNode
         if (zone.spaceRole !== 'room') continue
         if (!pointInPolygon(planPoint[0], planPoint[1], zone.polygon)) continue
+        event.preventDefault()
+        event.stopPropagation()
         useViewer.getState().setSelection({ selectedIds: [zone.id] })
         openForZone(zone.id, event.clientX, event.clientY)
-        return true
+        return
       }
-      return false
-    }
-
-    // Правый клик по комнате — единая панель (глобальный fallback для заливки).
-    const onContextMenu = (event: MouseEvent) => {
-      if (!hitTestRoom(event)) return
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    // Левый клик по комнате — тоже единая панель. Срабатывает только когда
-    // клик не перехватил элемент поверх (стена/плита/терминал): их обработчики
-    // останавливают всплытие, поэтому до document клик не доходит.
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return
-      if (!hitTestRoom(event)) return
-      event.preventDefault()
-      event.stopPropagation()
     }
     document.addEventListener('contextmenu', onContextMenu)
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => {
-      document.removeEventListener('contextmenu', onContextMenu)
-      document.removeEventListener('pointerdown', onPointerDown)
-    }
+    return () => document.removeEventListener('contextmenu', onContextMenu)
   }, [openForZone])
 
   if (!anchor || !node || node.type !== 'zone') return null
