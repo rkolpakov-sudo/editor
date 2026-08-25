@@ -67,8 +67,9 @@ describe('ductsToDxf', () => {
     expect(dxf).toContain('MEP_TERMINAL')
     expect(dxf).toContain('MEP_SLEEVE')
     expect(dxf).toContain('MEP_FIRE_DAMPER')
+    expect(dxf).toContain('MEP_ELEVATION')
     // LAYER entries: each has a color group code 62.
-    expect(dxf.match(/\n62\n/g)).toHaveLength(8) // 0 + 7 MEP layers
+    expect(dxf.match(/\n62\n/g)).toHaveLength(9) // 0 + 8 MEP layers
   })
 
   test('projects segment path onto the plan as LINE entities on the system layer', () => {
@@ -256,6 +257,64 @@ describe('ductsToDxf', () => {
     )
     const dxf = ductsToDxf(scene, { markings: { 'duct-segment_s1': 'П3' } })
     expect(dxf).toContain('1\nП3')
+  })
+
+  test('emits axis and bottom elevation marks at the run start (C4, ГОСТ 21.602)', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2.6, 0],
+          [2.5, 2.6, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply', diameter: 160 },
+      ),
+    )
+    const dxf = ductsToDxf(scene)
+    // Ось = path y = 2,6; низ = ось − D/2 (Ø160 → 2,520).
+    expect(dxf).toContain('1\n2,600')
+    expect(dxf).toContain('1\nниз 2,520')
+    // Отметки — на своём слое MEP_ELEVATION.
+    expect(dxf).toContain('8\nMEP_ELEVATION')
+  })
+
+  test('marks only elevation-change vertices plus the run start', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2.6, 0],
+          [4, 2.6, 0],
+          [4, 3, 5],
+        ],
+        { id: 'duct-segment_s1', system: 'supply' },
+      ),
+    )
+    const dxf = ductsToDxf(scene)
+    // Старт (2,600) и изменение на вершине 2 (3,000); вершина 1 ось не меняла.
+    expect(dxf.match(/\n1\n2,600\n/g)).toHaveLength(1)
+    expect(dxf.match(/\n1\n3,000\n/g)).toHaveLength(1)
+  })
+
+  test('elevationReference axis/bottom and drawElevations=false', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2.6, 0],
+          [2.5, 2.6, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply' },
+      ),
+    )
+    const axisOnly = ductsToDxf(scene, { elevationReference: 'axis' })
+    expect(axisOnly).toContain('1\n2,600')
+    expect(axisOnly).not.toContain('низ ')
+
+    const bottomOnly = ductsToDxf(scene, { elevationReference: 'bottom' })
+    expect(bottomOnly).toContain('1\nниз 2,520')
+    expect(bottomOnly).not.toContain('1\n2,600')
+
+    const none = ductsToDxf(scene, { drawElevations: false })
+    expect(none).not.toContain('1\n2,600')
+    expect(none).not.toContain('низ ')
   })
 })
 

@@ -7,6 +7,7 @@ import type {
 } from '../schema'
 import { type DuctSectionProfile, ductSectionPerimeterM } from './aerodynamics'
 import { DUCT_SEGMENT_LENGTHS_M } from './constants'
+import { elevationRangeLabel, profileVerticalHalfM } from './elevation-marks'
 import { planGostSegmentation } from './gost-segmentation'
 import type { NetworkSizingResult, SizedDuctSection } from './network-sizing'
 import type { SystemType } from './norms-types'
@@ -23,7 +24,8 @@ import {
  * Ведомость материалов (спецификация) системы вентиляции по ГОСТ-номенклатуре
  * Р 70349 / СП 73 — «Спецификация» Этапа 6. Чистая логика над сценой: группирует
  * воздуховоды по профилю и системе, разлагает на стандартные звенья ГОСТ,
- * считает фасонные части, решётки, крепления и проходы через стены.
+ * считает фасонные части, решётки, крепления и проходы через стены. С Этапа
+ * C4 каждая позиция воздуховода несёт отметку оси/низа (ГОСТ 21.602).
  * Не зависит от реестра (registry) — работает на любом `Record<AnyNodeId, AnyNode>`.
  */
 
@@ -57,6 +59,8 @@ export type DuctSpecItem = {
   velocityMps?: number
   /** Подобранный профиль ГОСТ из сетевого подбора, напр. «Ø160». */
   sizedLabel?: string
+  /** Отметка оси/низа по ГОСТ 21.602, напр. «ось 2,600 · низ 2,520» (C4). */
+  elevation?: string
   /** Примечание — разбивка на звенья ГОСТ, свободные длины и т.п. */
   note?: string
 }
@@ -277,6 +281,29 @@ function gostPieceCounts(segments: readonly DuctSegmentNode[]): {
   return { pieces, customCount }
 }
 
+/** Отметка оси/низа группы участков (ГОСТ 21.602, Этап C4): диапазон осей
+ *  по вершинам путей и соответствующий диапазон низа (ось − полувысота
+ *  профиля). Одна отметка, когда ось по всей группе постоянна. */
+function groupElevationLabel(
+  segments: readonly DuctSegmentNode[],
+  profile: DuctSectionProfile,
+): string {
+  let minAxisM = Number.POSITIVE_INFINITY
+  let maxAxisM = Number.NEGATIVE_INFINITY
+  for (const segment of segments) {
+    for (const point of segment.path) {
+      const axis = point[1]
+      if (axis < minAxisM) minAxisM = axis
+      if (axis > maxAxisM) maxAxisM = axis
+    }
+  }
+  if (!Number.isFinite(minAxisM)) return ''
+  const halfM = profileVerticalHalfM(profile)
+  const axisLabel = elevationRangeLabel(minAxisM, maxAxisM)
+  const bottomLabel = elevationRangeLabel(minAxisM - halfM, maxAxisM - halfM)
+  return `ось ${axisLabel} · низ ${bottomLabel}`
+}
+
 /** Build the full material specification for all duct nodes in the scene. */
 export function buildDuctSpecification(
   nodes: Readonly<Record<AnyNodeId, AnyNode>>,
@@ -439,6 +466,7 @@ export function buildDuctSpecification(
       flowM3h: sizing && sizing.flowM3h > 0 ? sizing.flowM3h : undefined,
       velocityMps: sizing?.velocityMps,
       sizedLabel: sizing?.sizedLabel,
+      elevation: groupElevationLabel(group.segments, group.size.profile),
       note: notes.length > 0 ? notes.join('; ') : undefined,
     })
     if (customCount > 0) {
@@ -655,6 +683,7 @@ function specRowToCsv(row: DuctSpecItem, marking: (system?: SystemType) => strin
     row.unit,
     row.quantity,
     row.lengthM !== undefined ? row.lengthM.toFixed(2) : '',
+    row.elevation ?? '',
     row.note ?? '',
   ]
     .map(csvCell)
@@ -675,6 +704,7 @@ export function specificationToCsv(specification: DuctSpecification): string {
     'Ед.',
     'Кол-во',
     'Длина, м',
+    'Отметка, м',
     'Примечание',
   ]
   const lines: string[] = [header.map(csvCell).join(';')]
@@ -721,6 +751,7 @@ export function specificationToText(specification: DuctSpecification): string {
         )
       }
       if (row.massKg !== undefined) extra.push(`${row.massKg.toFixed(1)} кг`)
+      if (row.elevation !== undefined) extra.push(row.elevation)
       lines.push(
         `  ${row.pos}. ${row.name} — ${row.quantity} ${row.unit}${row.lengthM !== undefined ? ` (${row.lengthM.toFixed(2)} м)` : ''}${extra.length > 0 ? ` — ${extra.join(', ')}` : ''}`,
       )

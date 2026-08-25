@@ -545,6 +545,9 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     expect(exhaustDuctRow.flowM3h).toBeGreaterThan(0)
     expect(exhaustDuctRow.sizedLabel).toContain('Ø100')
     expect(exhaustDuctRow.note).toContain('ΔP')
+    // C4: позиция воздуховода несёт отметку оси/низа по ГОСТ 21.602.
+    expect(exhaustDuctRow.elevation).toBeDefined()
+    expect(exhaustDuctRow.elevation!).toMatch(/^ось \d+,\d{3} · низ \d+,\d{3}$/)
     expect(spec.totals.sleeves).toBe(4)
 
     // 9) DXF v2: маркировка на плане, утка по типу, легенда систем, гильзы.
@@ -554,5 +557,8 @@ describe('MEP pipeline: план → зоны → трассы П/В → пер�
     expect(dxf).toContain('Утка')
     expect(dxf).toContain('Системы')
     expect(dxf).toContain('MEP_SLEEVE')
+    // C4: отметки оси/низа на слое MEP_ELEVATION у трасс.
+    expect(dxf).toContain('MEP_ELEVATION')
+    expect(dxf).toContain('низ ')
   })
 })

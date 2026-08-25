@@ -408,6 +408,44 @@ describe('buildDuctSpecification', () => {
     expect(row!.note).toContain('подбор: Ø100')
     expect(row!.note).toContain('ΔP = 4,5 Па')
   })
+
+  test('duct rows carry the ГОСТ 21.602 elevation mark (ось/низ) (Этап C4)', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2.6, 0],
+          [2.5, 2.6, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply', diameter: 160 },
+      ),
+    )
+    const spec = buildDuctSpecification(scene)
+    const row = spec.sections.ducts.find((r) => r.name === 'Воздуховод круглый Ø160')
+    // Ось = path y = 2,6; низ = ось − D/2 (Ø160 → 2,520).
+    expect(row!.elevation).toBe('ось 2,600 · низ 2,520')
+  })
+
+  test('elevation mark spans a range when a group covers several axes', () => {
+    const scene = sceneOf(
+      segment(
+        [
+          [0, 2.6, 0],
+          [2, 2.6, 0],
+        ],
+        { id: 'duct-segment_s1', system: 'supply', diameter: 160 },
+      ),
+      segment(
+        [
+          [0, 3.0, 5],
+          [2, 3.0, 5],
+        ],
+        { id: 'duct-segment_s2', system: 'supply', diameter: 160 },
+      ),
+    )
+    const spec = buildDuctSpecification(scene)
+    const row = spec.sections.ducts.find((r) => r.name === 'Воздуховод круглый Ø160')
+    expect(row!.elevation).toBe('ось 2,600–3,000 · низ 2,520–2,920')
+  })
 })
 
 describe('specificationToCsv', () => {
@@ -426,6 +464,7 @@ describe('specificationToCsv', () => {
     const lines = csv.trim().split('\n')
     expect(lines[0]!).toContain('Позиция')
     expect(lines[0]!).toContain('Система')
+    expect(lines[0]!).toContain('Отметка, м')
     expect(csv).toContain('[Воздуховоды]')
     expect(csv).toContain('[Итого]')
     expect(csv).toContain('П1')
@@ -465,10 +504,10 @@ describe('specificationToCsv', () => {
       cells.push(current)
       return cells
     }
-    // Every data line must have exactly 8 top-level columns.
+    // Every data line must have exactly 9 top-level columns.
     for (const line of csv.trim().split('\n')) {
       if (line.startsWith('[') || line.startsWith(';')) continue
-      expect(splitCells(line)).toHaveLength(8)
+      expect(splitCells(line)).toHaveLength(9)
     }
   })
 })
@@ -487,5 +526,8 @@ describe('specificationToText', () => {
     const text = specificationToText(buildDuctSpecification(scene))
     expect(text).toContain('П1')
     expect(text).toContain('Воздуховод круглый Ø160')
+    // Отметка оси/низа попадает в текстовую ведомость (Этап C4).
+    expect(text).toContain('ось 2,000')
+    expect(text).toContain('низ 1,920')
   })
 })

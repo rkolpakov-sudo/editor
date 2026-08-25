@@ -1,5 +1,7 @@
-import type { AnyNode, AnyNodeId, DuctFittingNode } from '../schema'
+import type { AnyNode, AnyNodeId, DuctFittingNode, DuctSegmentNode } from '../schema'
+import type { DuctSectionProfile } from './aerodynamics'
 import { computeBypassGeometry } from './bypass'
+import { formatElevationM, profileVerticalHalfM } from './elevation-marks'
 import { systemMarkingLetter } from './gost-segmentation'
 import type { SystemType } from './norms-types'
 import {
@@ -17,8 +19,9 @@ import {
  * (отвод — дуга, утка — S-полилиния из `computeBypassGeometry`, тройник/
  * крестовина — линии, переходы — сужающиеся пары) с размерами мм в тексте,
  * решётки квадратами, гильзы/клапаны на пересечениях со стенами и легенду
- * систем. Маркировка П1/В1/Р1 по ГОСТ 21.602. Не требует Three.js — только
- * строки.
+ * систем. Маркировка П1/В1/Р1 по ГОСТ 21.602; с Этапа C4 — отметки оси/низа
+ * (символ-уровень с подписью, слой MEP_ELEVATION) на вершинах трасс, где
+ * ось меняется. Не требует Three.js — только строки.
  */
 
 export type DxfExportOptions = {
@@ -38,6 +41,12 @@ export type DxfExportOptions = {
   fireRatedBarriers?: readonly WallLike[]
   /** Высота легенды/подписей размеров (Этап 10). */
   legendHeightM?: number
+  /** Рисовать отметки уровня (оси/низа) у трасс — включено по умолчанию (C4). */
+  drawElevations?: boolean
+  /** Что выносить в отметки: ось | низ | оба (по умолчанию оба, ГОСТ 21.602). */
+  elevationReference?: 'axis' | 'bottom' | 'both'
+  /** Высота текста отметки уровня, м (по умолчанию 0.7 × labelHeightM). */
+  elevationHeightM?: number
 }
 
 const DXF_LAYER_COLORS: Record<string, number> = {
@@ -49,6 +58,7 @@ const DXF_LAYER_COLORS: Record<string, number> = {
   MEP_TERMINAL: 2,
   MEP_SLEEVE: 4,
   MEP_FIRE_DAMPER: 6,
+  MEP_ELEVATION: 9,
 }
 
 const MEP_LAYERS = [
@@ -60,6 +70,7 @@ const MEP_LAYERS = [
   'MEP_TERMINAL',
   'MEP_SLEEVE',
   'MEP_FIRE_DAMPER',
+  'MEP_ELEVATION',
 ]
 
 function layerForSystem(system: SystemType): string {
@@ -383,6 +394,89 @@ function drawPenetrations(
   }
 }
 
+// ── Elevation marks (Этап C4, ГОСТ 21.602) ────────────────────────────────
+
+/** Порог смены отметки на вершине трассы, м (меньше — тот же уровень). */
+const ELEV_CHANGE_EPS_M = 1e-3
+
+function segmentProfile(node: DuctSegmentNode): DuctSectionProfile {
+  return node.shape === 'round'
+    ? { shape: 'round', diameterMm: node.diameter }
+    : { shape: node.shape, widthMm: node.width, heightMm: node.height }
+}
+
+/** Направление трассы в плане на вершине i (по соседнему звену). */
+function vertexDirPlan(points: readonly PlanPoint[], i: number): PlanPoint {
+  const a = i === 0 ? points[0]! : points[i - 1]!
+  const b = i === points.length - 1 ? points[points.length - 1]! : points[i + 1]!
+  const dx = b[0] - a[0]
+  const dz = b[1] - a[1]
+  const len = Math.hypot(dx, dz)
+  return len < 1e-9 ? ([1, 0] as const) : ([dx / len, dz / len] as const)
+}
+
+/** Символ отметки уровня: лидер-линия + треугольник-уровень вниз + подпись.
+ *  Смещение `offsetM` уводит символ перпендикулярно трассе (вниз по плану),
+ *  чтобы он не накладывался на линию воздуховода. */
+function drawElevationMark(
+  writer: DxfWriter,
+  anchor: PlanPoint,
+  dir: PlanPoint,
+  label: string,
+  heightM: number,
+  offsetM: number,
+): void {
+  const layer = 'MEP_ELEVATION'
+  let perp: PlanPoint = [-dir[1], dir[0]]
+  if (perp[1] > 0) perp = [-perp[0], -perp[1]]
+  const ax = anchor[0] + perp[0] * offsetM
+  const ay = anchor[1] + perp[1] * offsetM
+  const len = heightM * 2.2
+  const tri = heightM * 0.8
+  writer.line(ax - len / 2, ay, ax + len / 2, ay, layer)
+  writer.line(ax + len / 2 - tri / 2, ay, ax + len / 2, ay - tri, layer)
+  writer.line(ax + len / 2 + tri / 2, ay, ax + len / 2, ay - tri, layer)
+  writer.text(ax, ay + heightM * 0.3, heightM * 0.7, label, layer)
+}
+
+/** Отметки оси/низа на вершинах участков: стартовая вершина и каждая
+ *  вершина, где ось меняется. Ось = path[·][1] (м над полом уровня),
+ *  низ = ось − полувысота профиля. */
+function drawElevationMarks(
+  writer: DxfWriter,
+  nodes: Readonly<Record<AnyNodeId, AnyNode>>,
+  heightM: number,
+  reference: 'axis' | 'bottom' | 'both',
+): void {
+  for (const node of Object.values(nodes)) {
+    if (node?.type !== 'duct-segment') continue
+    const profile = segmentProfile(node)
+    const halfM = profileVerticalHalfM(profile)
+    const plan = node.path.map(planPoint)
+    let prevAxisM = Number.NaN
+    for (let i = 0; i < node.path.length; i += 1) {
+      const axisM = node.path[i]![1]
+      if (i > 0 && Math.abs(axisM - prevAxisM) < ELEV_CHANGE_EPS_M) continue
+      prevAxisM = axisM
+      const anchor = plan[i]!
+      const dir = vertexDirPlan(plan, i)
+      if (reference === 'axis' || reference === 'both') {
+        drawElevationMark(writer, anchor, dir, formatElevationM(axisM), heightM, heightM * 1.5)
+      }
+      if (reference === 'bottom' || reference === 'both') {
+        drawElevationMark(
+          writer,
+          anchor,
+          dir,
+          `низ ${formatElevationM(axisM - halfM)}`,
+          heightM,
+          heightM * 3.0,
+        )
+      }
+    }
+  }
+}
+
 // ── System legend (Этап 10) ───────────────────────────────────────────────
 
 const SYSTEM_LEGEND_NAME: Record<SystemType, string> = {
@@ -469,6 +563,9 @@ export function ductsToDxf(
   const drawFittings = options.drawFittings ?? true
   const drawTerminals = options.drawTerminals ?? true
   const drawPenetrationsOption = options.drawPenetrations ?? true
+  const drawElevations = options.drawElevations ?? true
+  const elevationReference = options.elevationReference ?? 'both'
+  const elevationHeightM = options.elevationHeightM ?? labelHeightM * 0.7
   const walls = options.walls ?? []
   const barriers = options.fireRatedBarriers ?? []
   const markings = options.markings ?? perSystemMarkings(nodes)
@@ -525,6 +622,11 @@ export function ductsToDxf(
   // ── Wall penetrations: гильзы/клапаны на пересечениях (Этап 10) ────────
   if (drawPenetrationsOption) {
     drawPenetrations(entities, nodes, walls, barriers)
+  }
+
+  // ── Отметки оси/низа у трасс (Этап C4, ГОСТ 21.602) ────────────────────
+  if (drawElevations) {
+    drawElevationMarks(entities, nodes, elevationHeightM, elevationReference)
   }
 
   // ── Legend of systems below the plan (Этап 10) ──────────────────────────
