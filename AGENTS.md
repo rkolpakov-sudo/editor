@@ -108,11 +108,14 @@ A3 — контекстное меню «Тип помещения»: правы
 зоны); общие словари подписей/норм перенесены в схему (`SPACE_CATEGORY_LABELS/RATES` в
 `schema/nodes/zone.ts`), правый клик идёт через editor-emitter
 (`lib/floorplan-events.ts`) из floorplan-registry-layer; W10-тест: регенерация зоны при
-изменении стен трогает только `polygon`. **Этапы B1–B5 выполнены** (ядро агента
+изменении стен трогает только `polygon`. **Этапы B1–B5 и C1–C3 выполнены** (ядро агента
 `packages/core/src/mep/agent/*`: validate-sketch, recognize-topology, flows, section-sizing +
-равные потери в sizing, elevations, fittings + routing-preferences, build-plan — конвейер
-§2.2 PLAN-AGENT до плана построения; 3321 тест зелёный). Следующий — **Этап C** (кнопка
-«Трассировка», рекомендации оборудования, автоответвления, отметки в DXF).
+равные потери в sizing, elevations, fittings + routing-preferences, build-plan, branches,
+materialize — конвейер §2.2 PLAN-AGENT до плана построения и материализации; кнопка
+«Трассировка» в панели «Вентиляция» с блокерами/решениями/регенерацией, рекомендации
+оборудования `equipment-catalog.ts`, автоответвления терминалов к магистрали; 3340 тестов
+зелёные). Следующий — **C4** (отметки осей/низа в DXF и спецификации) и **Этап D** (сквозная
+регрессия + Playwright).
 Архитектурно-чувствительные
 изменения (новая схема/система/инструмент) — сначала читать `wiki/architecture/` по правилам ниже.
 
