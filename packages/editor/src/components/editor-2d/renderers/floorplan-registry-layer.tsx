@@ -906,16 +906,20 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
       event.preventDefault()
       event.stopPropagation()
       if (isFloorplanOpeningPlacementActiveNow()) return
-      // A right-click always targets the room under the cursor — make it the
-      // sole selection so the menu acts on what the user pointed at.
-      applyEntrySelection(id, { shouldToggle: false, isolateMember: false })
+      // Открытие контекстного меню не должно сбрасывать выделение комнаты,
+      // установленное левым кликом: трогаем выделение только если зона ещё
+      // не выбрана (и без группового расширения).
+      const currentSelectedIds = useViewer.getState().selection.selectedIds
+      if (!currentSelectedIds.includes(id)) {
+        useViewer.getState().setSelection({ selectedIds: [id] })
+      }
       floorplanEmitter.emit('floorplan:node-context-menu', {
         nodeId: id,
         clientX: event.clientX,
         clientY: event.clientY,
       })
     },
-    [applyEntrySelection],
+    [],
   )
 
   const floorplanData = useMemo(() => {

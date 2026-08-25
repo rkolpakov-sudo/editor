@@ -88,7 +88,11 @@ export function FloorplanZoneContextMenu() {
         if (!pointInPolygon(planPoint[0], planPoint[1], zone.polygon)) continue
         event.preventDefault()
         event.stopPropagation()
-        useViewer.getState().setSelection({ selectedIds: [zone.id] })
+        // Не сбрасываем выделение, установленное левым кликом: выделяем
+        // только если зона ещё не выбрана.
+        if (!useViewer.getState().selection.selectedIds.includes(zone.id)) {
+          useViewer.getState().setSelection({ selectedIds: [zone.id] })
+        }
         openForZone(zone.id, event.clientX, event.clientY)
         return
       }
