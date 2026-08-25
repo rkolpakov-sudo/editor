@@ -4995,6 +4995,9 @@ export function FloorplanPanel({
   const latestFittedViewportRef = useRef<FloorplanViewport | null>(null)
   const floorplanViewAnimationFrameRef = useRef<number | null>(null)
   const floorplanViewAnimationTargetRef = useRef<FloorplanViewAnimationTarget | null>(null)
+  // Выравнивание по сетке при каждом входе в 2D: первый сброс камеры после
+  // открытия плана не наследует азимут 3D-камеры (план не наклоняется).
+  const alignFloorplanNorthOnOpenRef = useRef(false)
   const floorplanZoomCommitTimerRef = useRef<number | null>(null)
   const floorplanRenderScaleCommitTimerRef = useRef<number | null>(null)
   const floorplanViewportInteractionInProgressRef = useRef(false)
@@ -6595,11 +6598,18 @@ export function FloorplanPanel({
   }, [stopFloorplanViewAnimation])
 
   const syncFloorplanViewportToNavigationPose = useCallback(
-    (pose: NavigationSyncPose) => {
+    (inputPose: NavigationSyncPose) => {
       // The transient camera stream owns refs + imperative SVG presentation.
       // React state is committed only by the scheduler after the stream settles.
       if (!isFloorplanOpenRef.current) {
         return
+      }
+      // При входе в 2D план выравнивается по сетке (без наклона): первый
+      // сброс камеры после открытия не наследует азимут 3D-камеры.
+      let pose = inputPose
+      if (alignFloorplanNorthOnOpenRef.current) {
+        alignFloorplanNorthOnOpenRef.current = false
+        pose = { ...pose, azimuth: cameraAzimuthFromFloorplanRotation(buildingRotationDeg) }
       }
       const localNavigationInProgress =
         floorplanViewportInteractionInProgressRef.current &&
@@ -6609,8 +6619,13 @@ export function FloorplanPanel({
       }
       floorplanNavigationSyncScheduler.update(pose)
     },
-    [floorplanNavigationSyncScheduler],
+    [buildingRotationDeg, floorplanNavigationSyncScheduler],
   )
+
+  // Готовим выравнивание по сетке при каждом открытии 2D-плана.
+  useEffect(() => {
+    alignFloorplanNorthOnOpenRef.current = isFloorplanOpen
+  }, [isFloorplanOpen])
 
   useEffect(() => {
     if (!isFloorplanOpen) return
