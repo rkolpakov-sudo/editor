@@ -229,7 +229,8 @@ UI: секция в панели «Вентиляция». Каждое реше
 - Изменяемые: `duct-segment/tool.tsx` (режим эскиза), `packages/editor` панель «Вентиляция»
   (кнопка, решения, предпочтения, рекомендации), `packages/core/src/mep/{dxf,specification}.ts`
   (отметки), `schema/nodes/hvac-equipment.ts` (каталог РФ), контекстное меню зон в `apps/editor`.
-- Документация: `docs/mep/PLAN.md` (ссылка), `CHANGELOG.md`, `AGENTS.md` по ходу этапов.
+- Документация: `docs/mep/PLAN.md` (ссылка), `docs/mep/GUIDE.md` (гайд пользователя —
+  от запуска приложения до автотрассированной сети), `CHANGELOG.md`, `AGENTS.md` по ходу этапов.
 
 ## 6. Риски этапа (сознательно за скоупом)
 
