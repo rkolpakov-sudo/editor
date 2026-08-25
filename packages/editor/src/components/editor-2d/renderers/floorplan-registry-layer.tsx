@@ -1865,7 +1865,14 @@ const FloorplanRegistryEntry = memo(function FloorplanRegistryEntry({
   wallDimensionReference,
   visibilityRootId,
 }: FloorplanRegistryEntryProps): React.ReactElement | null {
-  const selected = useViewer((state) => state.selection.selectedIds.includes(nodeId))
+  // Зона считается выбранной и по `selectedIds`, и по `selection.zoneId`:
+  // фон/select-zone выставляет `zoneId`, что по иерархическому правилу
+  // `setSelection` сбрасывает `selectedIds` — но штриховка комнаты не должна
+  // пропадать при открытии контекстного меню.
+  const selected = useViewer(
+    (state) =>
+      state.selection.selectedIds.includes(nodeId) || state.selection.zoneId === nodeId,
+  )
   const highlighted = useViewer((state) => state.previewSelectedIds.includes(nodeId))
   const suppressHandles = useViewer(
     (state) =>
