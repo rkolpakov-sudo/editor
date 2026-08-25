@@ -1,7 +1,6 @@
 'use client'
 
 import { type AnyNodeId, useScene, type ZoneNode } from '@pascal-app/core'
-import { useViewer } from '@pascal-app/viewer'
 import { useCallback, useEffect, useState } from 'react'
 import { clientToPlan } from '../../lib/floorplan/plan-coords'
 import { floorplanEmitter } from '../../lib/floorplan-events'
@@ -41,26 +40,6 @@ export function FloorplanZoneContextMenu() {
     setAnchor({ nodeId, x: clientX, y: clientY })
   }, [])
 
-  // Сразу после открытия меню возвращаем выделение комнаты, если оно было
-  // сброшено во время жеста правого клика (pointerdown/pointerup до
-  // contextmenu). Плюс держим его, пока меню открыто.
-  useEffect(() => {
-    if (!anchor) return
-    const assert = () => {
-      const current = useViewer.getState().selection.selectedIds
-      if (current.length === 0 || !current.includes(anchor.nodeId)) {
-        useViewer.getState().setSelection({ selectedIds: [anchor.nodeId] })
-      }
-    }
-    assert()
-    const timer = window.setTimeout(assert, 0)
-    const unsub = useViewer.subscribe(assert)
-    return () => {
-      window.clearTimeout(timer)
-      unsub()
-    }
-  }, [anchor])
-
   // Кликабельная заливка зоны обрабатывает правый клик в registry-слое
   // (эмитит floorplan:node-context-menu) — открываем по нему панель.
   useEffect(() => {
@@ -72,7 +51,7 @@ export function FloorplanZoneContextMenu() {
   }, [])
 
   // Правая кнопка по комнате — единое контекстное меню у курсора (fallback,
-  // когда событие не перехватил registry-слой).
+  // когда событие не перехватил registry-слой). Выделение не трогаем.
   useEffect(() => {
     const onContextMenu = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return
@@ -93,11 +72,6 @@ export function FloorplanZoneContextMenu() {
         if (!pointInPolygon(planPoint[0], planPoint[1], zone.polygon)) continue
         event.preventDefault()
         event.stopPropagation()
-        // Не сбрасываем выделение, установленное левым кликом: выделяем
-        // только если зона ещё не выбрана.
-        if (!useViewer.getState().selection.selectedIds.includes(zone.id)) {
-          useViewer.getState().setSelection({ selectedIds: [zone.id] })
-        }
         openForZone(zone.id, event.clientX, event.clientY)
         return
       }

@@ -906,13 +906,8 @@ export const FloorplanRegistryLayer = memo(function FloorplanRegistryLayer() {
       event.preventDefault()
       event.stopPropagation()
       if (isFloorplanOpeningPlacementActiveNow()) return
-      // Открытие контекстного меню не должно сбрасывать выделение комнаты,
-      // установленное левым кликом: трогаем выделение только если зона ещё
-      // не выбрана (и без группового расширения).
-      const currentSelectedIds = useViewer.getState().selection.selectedIds
-      if (!currentSelectedIds.includes(id)) {
-        useViewer.getState().setSelection({ selectedIds: [id] })
-      }
+      // Правый клик только открывает меню — выделение (например, штриховка
+      // плиты/зоны, установленная левым кликом) НЕ трогаем.
       floorplanEmitter.emit('floorplan:node-context-menu', {
         nodeId: id,
         clientX: event.clientX,
@@ -1870,8 +1865,7 @@ const FloorplanRegistryEntry = memo(function FloorplanRegistryEntry({
   // `setSelection` сбрасывает `selectedIds` — но штриховка комнаты не должна
   // пропадать при открытии контекстного меню.
   const selected = useViewer(
-    (state) =>
-      state.selection.selectedIds.includes(nodeId) || state.selection.zoneId === nodeId,
+    (state) => state.selection.selectedIds.includes(nodeId) || state.selection.zoneId === nodeId,
   )
   const highlighted = useViewer((state) => state.previewSelectedIds.includes(nodeId))
   const suppressHandles = useViewer(
