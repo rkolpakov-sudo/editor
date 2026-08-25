@@ -246,4 +246,85 @@ describe('planBuildMutations — материализация плана в уз
     expect(mutations.create).toEqual([])
     expect(mutations.notes.some((note) => note.includes('без подобранного сечения'))).toBe(true)
   })
+
+  test('перепад осей материализуется ризером: 2 отвода 90° + вертикальное звено (§2.5)', () => {
+    const plan = planWith([
+      {
+        key: 'run0path0',
+        system: 'supply',
+        sourceRunIndex: 0,
+        points: [
+          [0, 0],
+          [4, 0],
+          [8, 0],
+        ],
+        axisM: [2.5, 3.0, 3.0],
+        profile: PROFILE_100,
+        flowM3h: 100,
+        velocityMps: 3.5,
+      },
+    ])
+    const mutations = planBuildMutations(plan)
+
+    expect(mutations.notes.some((note) => note.includes('Ривер'))).toBe(true)
+    const segments = mutations.create
+      .map(({ node }) => node)
+      .filter(
+        (node): node is AnyNode & { path: [number, number, number][] } =>
+          node.type === 'duct-segment',
+      )
+    const elbows = mutations.create
+      .map(({ node }) => node)
+      .filter((node) => node.type === 'duct-fitting')
+
+    // Горизонтальные звенья на своих осях + вертикальное звено ризера.
+    expect(segments).toHaveLength(3)
+    const flatBefore = segments.find(
+      (segment) => segment.path[0]![1] === 2.5 && segment.path[1]![1] === 2.5,
+    )
+    const flatAfter = segments.find(
+      (segment) => segment.path[0]![1] === 3.0 && segment.path[1]![1] === 3.0,
+    )
+    const vertical = segments.find(
+      (segment) => segment.path[0]![0] === 4 && segment.path[1]![0] === 4,
+    )
+    expect(flatBefore).toBeDefined()
+    expect(flatAfter).toBeDefined()
+    expect(vertical).toBeDefined()
+    // Вертикаль между патрубками отводов: 2.5+0.14 → 3.0−0.14.
+    expect(vertical!.path[0]![1]).toBeCloseTo(2.64, 6)
+    expect(vertical!.path[1]![1]).toBeCloseTo(2.86, 6)
+    // Пара отводов 90° на перепаде осей.
+    expect(elbows).toHaveLength(2)
+    for (const elbow of elbows) {
+      expect(elbow.angle).toBe(90)
+      expect(elbow.rotation.every((value: number) => Number.isFinite(value))).toBe(true)
+    }
+    const positions = elbows.map((elbow) => (elbow.position as [number, number, number])[1]).sort()
+    expect(positions[0]).toBeCloseTo(2.5, 6)
+    expect(positions[1]).toBeCloseTo(3.0, 6)
+  })
+
+  test('слишком малый перепад осей оставляет наклонный участок без ризера', () => {
+    const plan = planWith([
+      {
+        key: 'run0path0',
+        system: 'supply',
+        sourceRunIndex: 0,
+        points: [
+          [0, 0],
+          [4, 0],
+          [8, 0],
+        ],
+        axisM: [2.5, 2.6, 2.6],
+        profile: PROFILE_100,
+        flowM3h: 100,
+        velocityMps: 3.5,
+      },
+    ])
+    const mutations = planBuildMutations(plan)
+    // Перепад 0.1 м < 2×плечо (0.28) — пару отводов не поставить.
+    expect(mutations.notes.some((note) => note.includes('мал для пары отводов'))).toBe(true)
+    expect(mutations.create.filter(({ node }) => node.type === 'duct-fitting')).toHaveLength(0)
+  })
 })

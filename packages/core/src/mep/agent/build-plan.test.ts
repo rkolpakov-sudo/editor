@@ -201,6 +201,38 @@ describe('buildDuctPlan — конвейер §2.2 «эскиз + сцена →
     expect(plan.blockers.some((i) => i.code === 'orphan-path')).toBe(true)
   })
 
+  test('параллельные П/В в узком коридоре — предупреждение развести по высоте (§2.5)', () => {
+    const equipment = hvacUnit([0, 0, 0])
+    const diffuser = ductTerminal([8, 0, 0.1], 'diffuser')
+    const grille = ductTerminal([8, 0, 0], 'return-grille')
+    const plan = buildDuctPlan({
+      sketch: {
+        runs: [
+          // Приток вдоль z = 0.1, вытяжка вдоль z = 0 — рядом, параллельно.
+          run('supply', [
+            [0, 0.1],
+            [8, 0.1],
+          ]),
+          run('exhaust', [
+            [0, 0],
+            [8, 0],
+          ]),
+        ],
+      },
+      nodes: sceneOf(equipment, diffuser, grille),
+      terminalFlows: {
+        [diffuser.id]: 120,
+        [grille.id]: 120,
+      } as Record<AnyNodeId, number>,
+    })
+
+    const violation = plan.violations.find((i) => i.code === 'parallel-pv-clearance')
+    expect(violation).toBeDefined()
+    expect(violation!.severity).toBe('warning')
+    expect(violation!.source).toBe('crossings')
+    expect(violation!.message).toContain('разведите трассы по высоте')
+  })
+
   test('детерминизм: одинаковый вход — идентичный план', () => {
     const makeScene = () => {
       const equipment = hvacUnit([0, 0, 0])

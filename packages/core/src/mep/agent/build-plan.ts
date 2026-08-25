@@ -136,6 +136,85 @@ function planCrossings(topology: RecognizedTopology): string[] {
   return solutions
 }
 
+/** Боковой зазор параллельных трасс П/В, при котором нужен разворот по
+ *  высоте (узкий коридор), м — рабочее значение, не норма. */
+const PARALLEL_RUN_CLEARANCE_M = 0.3
+/** Допустимая параллельность направлений (косинус угла), 15°. */
+const PARALLEL_COS_MIN = Math.cos((15 * Math.PI) / 180)
+/** Точка считается общей (стык у установки), а не «рядом лежащей», м. */
+const SHARED_ENDPOINT_EPS_M = 1e-6
+
+/** Ближайшее расстояние между отрезками [a0,a1] и [b0,b1] на плане. */
+function planSegmentDistance(a0: PlanPoint, a1: PlanPoint, b0: PlanPoint, b1: PlanPoint): number {
+  const dx = a1[0] - a0[0]
+  const dz = a1[1] - a0[1]
+  const len = Math.hypot(dx, dz)
+  if (len < 1e-9) return Math.hypot(b0[0] - a0[0], b0[1] - a0[1])
+  // Перпендикулярное расстояние от b0 до прямой A.
+  return Math.abs(dx * (b0[1] - a0[1]) - dz * (b0[0] - a0[0])) / len
+}
+
+/**
+ * Параллельные трассы П/В в узком коридоре (§2.5): если приток и вытяжка
+ * идут рядом (боковой зазор < 0.3 м) на параллельных прямых с перекрытием
+ * проекций — предупреждение развести по высоте. Стыки у установки (общие
+ * концы отрезков) не считаются «коридором». Геометрия утки — этап 9.
+ */
+function planParallelClearances(topology: RecognizedTopology): DuctBuildPlanIssue[] {
+  const issues: DuctBuildPlanIssue[] = []
+  for (let i = 0; i < topology.paths.length; i += 1) {
+    const a = topology.paths[i]!
+    if (a.system === 'return') continue
+    for (let j = i + 1; j < topology.paths.length; j += 1) {
+      const b = topology.paths[j]!
+      if (b.system === a.system || b.system === 'return') continue
+      for (let si = 0; si < a.points.length - 1; si += 1) {
+        const a0 = [a.points[si]!.x, a.points[si]!.z] as PlanPoint
+        const a1 = [a.points[si + 1]!.x, a.points[si + 1]!.z] as PlanPoint
+        const dirA: PlanPoint = [a1[0] - a0[0], a1[1] - a0[1]]
+        const lenA = Math.hypot(dirA[0], dirA[1])
+        if (lenA < 1e-9) continue
+        for (let sj = 0; sj < b.points.length - 1; sj += 1) {
+          const b0 = [b.points[sj]!.x, b.points[sj]!.z] as PlanPoint
+          const b1 = [b.points[sj + 1]!.x, b.points[sj + 1]!.z] as PlanPoint
+          const dirB: PlanPoint = [b1[0] - b0[0], b1[1] - b0[1]]
+          const lenB = Math.hypot(dirB[0], dirB[1])
+          if (lenB < 1e-9) continue
+          // Параллельность направлений (с учётом противоположного хода).
+          const cos = Math.abs((dirA[0] * dirB[0] + dirA[1] * dirB[1]) / (lenA * lenB))
+          if (cos < PARALLEL_COS_MIN) continue
+          // Общие концы (стык у установки) — не «рядом идущий коридор».
+          const shared =
+            Math.hypot(a0[0] - b0[0], a0[1] - b0[1]) < SHARED_ENDPOINT_EPS_M ||
+            Math.hypot(a0[0] - b1[0], a0[1] - b1[1]) < SHARED_ENDPOINT_EPS_M ||
+            Math.hypot(a1[0] - b0[0], a1[1] - b0[1]) < SHARED_ENDPOINT_EPS_M ||
+            Math.hypot(a1[0] - b1[0], a1[1] - b1[1]) < SHARED_ENDPOINT_EPS_M
+          if (shared) continue
+          const gapM = Math.min(
+            planSegmentDistance(a0, a1, b0, b1),
+            planSegmentDistance(b0, b1, a0, a1),
+          )
+          if (gapM > PARALLEL_RUN_CLEARANCE_M) continue
+          // Перекрытие проекций на ось A.
+          const ta0 = ((b0[0] - a0[0]) * dirA[0] + (b0[1] - a0[1]) * dirA[1]) / (lenA * lenA)
+          const ta1 = ((b1[0] - a0[0]) * dirA[0] + (b1[1] - a0[1]) * dirA[1]) / (lenA * lenA)
+          const overlap = Math.min(1, Math.max(ta0, ta1)) - Math.max(0, Math.min(ta0, ta1))
+          if (overlap <= 0) continue
+          issues.push({
+            severity: 'warning',
+            source: 'crossings',
+            code: 'parallel-pv-clearance',
+            message: `Приток №${a.sourceRunIndex + 1} и вытяжка №${b.sourceRunIndex + 1} идут параллельно на расстоянии ${gapM.toFixed(2)} м — в узком коридоре разведите трассы по высоте.`,
+          })
+          sj = b.points.length
+          break
+        }
+      }
+    }
+  }
+  return issues
+}
+
 /**
  * Собрать план построения из эскиза и узлов уровня. Никогда не бросает:
  * все проблемы эскиза попадают в blockers/violations.
@@ -267,8 +346,9 @@ export function buildDuctPlan(input: BuildDuctPlanInput): DuctBuildPlan {
   solutions.push(...fittingPlan.fittings.map((fitting) => `${fitting.note} [${fitting.key}]`))
   violations.push(...toIssues('fittings', fittingPlan.issues))
 
-  // 7. Пересечения П/В → утка.
+  // 7. Пересечения П/В → утка + параллельные П/В в узком коридоре (§2.5).
   solutions.push(...planCrossings(topology))
+  violations.push(...planParallelClearances(topology))
 
   // Аннотации подобранных участков и итогов баланса.
   for (const path of sizingResult.paths) {

@@ -11,6 +11,8 @@ import {
   planAllBypassRuns,
   planBuildMutations,
   planGostSplit,
+  planSketchClear,
+  type RoutingPreferences,
   terminalFlowMap,
   useScene,
   type ZoneNode,
@@ -132,12 +134,34 @@ export type RoutingApplyReport =
 /** Допустимые системные узлы для флага «собрано агентом» (регенерация W5). */
 const AGENT_BUILT_TYPES = new Set(['duct-segment', 'duct-fitting'])
 
+/** Число узлов прошлой сборки агента (metadata.agentRouting) в сцене —
+ *  для предупреждения W5 перед повторной «Трассировкой». */
+export function countAgentBuiltNodes(nodes: Readonly<Record<AnyNodeId, AnyNode>>): number {
+  return Object.values(nodes).filter(
+    (node) =>
+      node != null &&
+      AGENT_BUILT_TYPES.has(node.type) &&
+      (node.metadata as { agentRouting?: boolean } | undefined)?.agentRouting === true,
+  ).length
+}
+
+/** «Очистить эскиз» (PLAN-AGENT §2.1): удалить все узлы `duct-sketch`
+ *  одной undo-командой. Возвращает число удалённых полилиний. */
+export function clearSketch(): { removed: number } {
+  const scene = useScene.getState()
+  const plan = planSketchClear(scene.nodes)
+  if (plan.delete.length > 0) {
+    scene.applyNodeChanges({ delete: plan.delete })
+  }
+  return { removed: plan.runCount }
+}
+
 /**
  * «Трассировка»: эскиз уровня → план построения → материализация одной
  * undo-командой (W4/W5). Повторный запуск перестраивает сеть: узлы прошлой
  * сборки агента (metadata.agentRouting) удаляются.
  */
-export function applyRoutingPlan(): RoutingApplyReport {
+export function applyRoutingPlan(preferences?: Partial<RoutingPreferences>): RoutingApplyReport {
   const scene = useScene.getState()
   const sketchNode = Object.values(scene.nodes).find((node) => node?.type === 'duct-sketch')
   if (!sketchNode) return { status: 'no-sketch' }
@@ -155,6 +179,7 @@ export function applyRoutingPlan(): RoutingApplyReport {
     autoBranchTerminalIds: Object.values(scene.nodes)
       .filter((node) => node?.type === 'duct-terminal')
       .map((node) => node.id),
+    preferences,
   })
   if (!plan.canBuild) {
     return { status: 'blocked', blockers: plan.blockers.map((issue) => issue.message) }

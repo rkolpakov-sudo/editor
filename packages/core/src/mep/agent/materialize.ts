@@ -181,6 +181,147 @@ function slicePoints3D(run: RunGeometry, sa: number, sb: number): Vec3[] {
   return out
 }
 
+/** Плановая точка (x, z) на дуге s (без высоты). */
+function planPointAtS(run: RunGeometry, s: number): [number, number] {
+  const point = pointAtS(run, s)
+  return [point[0], point[2]]
+}
+
+/** Срез полилинии по дуге [sa, sb] на постоянной оси (горизонтальное звено
+ *  у ризера): план тот же, y зафиксирован на `axis`. */
+function slicePoints3DAtAxis(run: RunGeometry, sa: number, sb: number, axis: number): Vec3[] {
+  const start = planPointAtS(run, sa)
+  const out: Vec3[] = [[start[0], axis, start[1]]]
+  for (let k = 1; k < run.points.length - 1; k += 1) {
+    if (run.cum[k]! > sa + 1e-9 && run.cum[k]! < sb - 1e-9) {
+      const p = run.points[k]!
+      out.push([p[0], axis, p[1]])
+    }
+  }
+  const end = planPointAtS(run, sb)
+  out.push([end[0], axis, end[1]])
+  return out
+}
+
+/** Есть ли перепад осей на вершине строго внутри дуги (sa, sb) — т.е. звено
+ *  пересекает вертикаль, которую не вынесли в ризер. */
+function hasAxisChangeInside(run: RunGeometry, sa: number, sb: number): boolean {
+  for (let k = 1; k < run.axisM.length; k += 1) {
+    const s = run.cum[k]!
+    if (s <= sa + 1e-9 || s >= sb - 1e-9) continue
+    if (Math.abs(run.axisM[k]! - run.axisM[k - 1]!) > 1e-6) return true
+  }
+  return false
+}
+
+/** Создать ризер (вертикальный переход): вертикальное звено между двумя
+ *  отводами 90° на перепаде осей вершины `vertexIndex`. */
+function createRiser(params: {
+  create: BuildMutations['create']
+  diameterMm: number
+  legElbow: number
+  runIndex: number
+  run: RunGeometry
+  system: DuctBuildPlan['runs'][number]['system']
+  parentId?: AnyNodeId
+  riser: { vertexIndex: number; riseM: number; axisBefore: number; axisAfter: number }
+  notes: string[]
+  fittings: DuctBuildPlan['fittings']
+}): void {
+  const { create, diameterMm, legElbow, runIndex, run, system, parentId, riser, notes, fittings } =
+    params
+  const v = riser.vertexIndex
+  const point = run.points[v]!
+  const sign = riser.riseM > 0 ? 1 : -1
+  const topY = riser.axisBefore + sign * legElbow
+  const bottomY = riser.axisAfter - sign * legElbow
+  if (sign > 0 ? bottomY <= topY + 1e-6 : bottomY >= topY - 1e-6) {
+    notes.push(
+      `Ривер ${runIndex}v${v}: не помещается вертикальное звено — оставлен наклонный участок.`,
+    )
+    return
+  }
+  // Вертикальное звено между патрубками двух отводов.
+  create.push({
+    node: DuctSegmentNode.parse({
+      object: 'node',
+      parentId: null,
+      visible: true,
+      metadata: { agentRouting: true },
+      path: [
+        [point[0], topY, point[1]],
+        [point[0], bottomY, point[1]],
+      ],
+      shape: 'round',
+      diameter: diameterMm,
+      system,
+      ductMaterial: 'sheet-metal',
+    }),
+    parentId,
+  })
+
+  // Отводы: riser-a (горизонталь → вертикаль), riser-b (вертикаль → горизонталь).
+  const inDir = norm3([point[0] - run.points[v - 1]![0], 0, point[1] - run.points[v - 1]![1]])
+  const outDir = norm3([
+    run.points[Math.min(v + 1, run.points.length - 1)]![0] - point[0],
+    0,
+    run.points[Math.min(v + 1, run.points.length - 1)]![1] - point[1],
+  ])
+  const vertical: Vec3 = [0, sign, 0]
+  const rotationA = basisTransferEuler([1, 0, 0], [0, 0, 1], inDir, vertical)
+  const rotationB = basisTransferEuler([1, 0, 0], [0, 0, 1], vertical, outDir)
+  if (!rotationA || !rotationB) {
+    notes.push(`Ривер ${runIndex}v${v}: вырожденная геометрия — оставлен наклонный участок.`)
+    return
+  }
+  const specA = fittings.find((f) => f.key === `p${runIndex}v${v - 1}-riser-a`)
+  const specB = fittings.find((f) => f.key === `p${runIndex}v${v - 1}-riser-b`)
+  const radiusFactor = specA?.radiusFactor ?? specB?.radiusFactor ?? 1.5
+  create.push({
+    node: DuctFittingNode.parse({
+      object: 'node',
+      parentId: null,
+      visible: true,
+      metadata: { agentRouting: true },
+      name: 'Отвод',
+      fittingType: 'elbow',
+      shape: 'round',
+      diameter: diameterMm,
+      diameter2: diameterMm,
+      angle: 90,
+      radiusFactor,
+      ductMaterial: 'sheet-metal',
+      system,
+      position: [point[0], riser.axisBefore, point[1]],
+      rotation: rotationA,
+    }),
+    parentId,
+  })
+  create.push({
+    node: DuctFittingNode.parse({
+      object: 'node',
+      parentId: null,
+      visible: true,
+      metadata: { agentRouting: true },
+      name: 'Отвод',
+      fittingType: 'elbow',
+      shape: 'round',
+      diameter: diameterMm,
+      diameter2: diameterMm,
+      angle: 90,
+      radiusFactor,
+      ductMaterial: 'sheet-metal',
+      system,
+      position: [point[0], riser.axisAfter, point[1]],
+      rotation: rotationB,
+    }),
+    parentId,
+  })
+  notes.push(
+    `Ривер ${runIndex}v${v}: вертикальный переход ${riser.axisBefore.toFixed(2)} → ${riser.axisAfter.toFixed(2)} м (2 отвода 90°, R=${radiusFactor}D).`,
+  )
+}
+
 function segmentPayload(
   path: Vec3[],
   profile: DuctSectionProfile,
@@ -353,12 +494,25 @@ export function planBuildMutations(
     }
 
     // Границы звеньев: пары «левая/правая» вокруг изгиба (зазор ±плечо
-    // отвода) и врезки (зазор ±плечо тройника). Между парой звено не
-    // создаётся — зазор занимает фасонная часть.
+    // отвода), врезки (зазор ±плечо тройника) и вертикального перехода
+    // (ризер: зазор ±плечо отвода + вертикальный участок). Между парой звено
+    // не создаётся — зазор занимает фасонная часть.
+    type RiserBoundary = {
+      vertexIndex: number
+      riseM: number
+      axisBefore: number
+      axisAfter: number
+    }
     type Boundary =
       | { s: number; kind: 'end' }
-      | { s: number; kind: 'left'; gap: 'bend' | 'tap'; vertex?: number }
-      | { s: number; kind: 'right'; gap: 'bend' | 'tap' }
+      | {
+          s: number
+          kind: 'left'
+          gap: 'bend' | 'tap' | 'riser'
+          vertex?: number
+          riser?: RiserBoundary
+        }
+      | { s: number; kind: 'right'; gap: 'bend' | 'tap' | 'riser' }
     const boundaries: Boundary[] = [
       { s: 0, kind: 'end' },
       { s: run.totalM, kind: 'end' },
@@ -382,6 +536,35 @@ export function planBuildMutations(
       const spec = plan.fittings.find((f) => f.key === `p${runIndex}v${v}-elbow`)
       if (spec) bendSpecByKey.set(spec.key, spec)
     }
+    // Вертикальные переходы (§2.5): перепад осей соседних вершин — пара
+    // отводов 90° + вертикальный участок. Слишком малый перепад (нет места
+    // под два отвода) оставляет наклонный участок (v1 fallback, как раньше).
+    for (let v = 1; v < run.points.length; v += 1) {
+      const axisBefore = run.axisM[v - 1] ?? 0
+      const axisAfter = run.axisM[v] ?? 0
+      const riseM = axisAfter - axisBefore
+      if (Math.abs(riseM) <= 1e-6) continue
+      const s = run.cum[v]!
+      if (s - legElbow < MIN_LEG_M || s + legElbow > run.totalM - MIN_LEG_M) {
+        notes.push(
+          `Ривер ${runIndex}v${v}: рядом с концом трассы нет места под пару отводов — оставлен наклонный участок.`,
+        )
+        continue
+      }
+      if (Math.abs(riseM) < 2 * legElbow + MIN_LEG_M) {
+        notes.push(
+          `Ривер ${runIndex}v${v}: перепад осей ${Math.abs(riseM).toFixed(2)} м мал для пары отводов — оставлен наклонный участок.`,
+        )
+        continue
+      }
+      boundaries.push({
+        s: s - legElbow,
+        kind: 'left',
+        gap: 'riser',
+        riser: { vertexIndex: v, riseM, axisBefore, axisAfter },
+      })
+      boundaries.push({ s: s + legElbow, kind: 'right', gap: 'riser' })
+    }
     for (const cut of hostCuts.get(runIndex) ?? []) {
       boundaries.push({ s: cut.s - cut.halfGapM, kind: 'left', gap: 'tap' })
       boundaries.push({ s: cut.s + cut.halfGapM, kind: 'right', gap: 'tap' })
@@ -399,9 +582,33 @@ export function planBuildMutations(
       const prev = clean[k]!
       const next = clean[k + 1]!
       // Зазор пары «левая→правая» занимает фасонная часть — звено не нужно.
-      if (prev.kind === 'left' && next.kind === 'right') continue
+      if (prev.kind === 'left' && next.kind === 'right') {
+        if (prev.gap === 'riser' && prev.riser) {
+          createRiser({
+            create,
+            diameterMm,
+            legElbow,
+            runIndex,
+            run,
+            system: planned.system,
+            parentId,
+            riser: prev.riser,
+            notes,
+            fittings: plan.fittings,
+          })
+        }
+        continue
+      }
       if (next.s - prev.s < MIN_LEG_M) continue
-      const path = slicePoints3D(run, prev.s, next.s)
+      // Звено у ризера идёт горизонтально на оси своей начальной вершины;
+      // звено без перепада осей — как раньше (интерполяция по осям).
+      const adjoinsRiser =
+        (prev.kind !== 'end' && prev.gap === 'riser') ||
+        (next.kind !== 'end' && next.gap === 'riser')
+      const flatAtStart = adjoinsRiser && !hasAxisChangeInside(run, prev.s, next.s)
+      const path = flatAtStart
+        ? slicePoints3DAtAxis(run, prev.s, next.s, run.axisM[segmentIndexAt(run, prev.s)] ?? 0)
+        : slicePoints3D(run, prev.s, next.s)
       create.push({
         node: segmentPayload(path, profile, planned.system),
         parentId,

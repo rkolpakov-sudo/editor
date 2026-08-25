@@ -8,9 +8,12 @@ import {
   computeNetworkFlows,
   computeNetworkPressure,
   computeZoneAirflows,
+  DEFAULT_ROUTING_PREFERENCES,
   ductsToDxf,
+  normalizeRoutingPreferences,
   planAllBypasses,
   planSystemMarkings,
+  type RoutingPreferences,
   recommendEquipment,
   sizeDuctNetworks,
   sizedProfiles,
@@ -25,8 +28,10 @@ import {
   Check,
   ClipboardList,
   Download,
+  Eraser,
   Fan,
   Map as MapIcon,
+  SlidersHorizontal,
   Wind,
   X,
 } from 'lucide-react'
@@ -35,6 +40,8 @@ import {
   applyAllBypasses,
   applyRoutingPlan,
   type BypassApplyReport,
+  clearSketch,
+  countAgentBuiltNodes,
   type RoutingApplyReport,
 } from '../../lib/mep-actions'
 import { cn } from '../../lib/utils'
@@ -282,6 +289,8 @@ function NetworkCalcSection({
               <p className="text-[9px] text-muted-foreground">
                 Подсветка — скорость вне норм-диапазона СП 60 прил. Л или шумовая проверка (&gt;5
                 м/с). Порог балансировки ответвлений 15% — рабочее значение до верификации по СП 60.
+                Статусы верификации: ξ отводов и фиттингов — FITTING_ZETA_VERIFIED=false (справочник
+                ОВиК / Идельчик, до сверки с нормой).
               </p>
             </>
           )}
@@ -303,6 +312,10 @@ function VentilationContent() {
   const [report, setReport] = useState<BypassApplyReport | null>(null)
   const [routingReport, setRoutingReport] = useState<RoutingApplyReport | null>(null)
   const [showSpec, setShowSpec] = useState(false)
+  const [preferences, setPreferences] = useState<Partial<RoutingPreferences>>({})
+  const [showPreferences, setShowPreferences] = useState(false)
+  const [sketchCleared, setSketchCleared] = useState<number | null>(null)
+  const prefs = normalizeRoutingPreferences(preferences)
 
   const networks = useMemo(() => buildDuctNetworks(nodes), [nodes])
   const markings = useMemo(() => planSystemMarkings(nodes), [nodes])
@@ -346,6 +359,8 @@ function VentilationContent() {
   const hasDucts = networks.length > 0
   const hasCrossings = bypass.plans.length + bypass.skipped.length > 0
   const totalLengthM = networks.reduce((sum, network) => sum + network.lengthM, 0)
+  // W5: узлы прошлой сборки агента — предупреждение перед повторной трассировкой.
+  const agentBuiltCount = useMemo(() => countAgentBuiltNodes(nodes), [nodes])
 
   const handleAutoBypass = () => {
     const next = applyAllBypasses()
@@ -353,8 +368,15 @@ function VentilationContent() {
   }
 
   const handleRouting = () => {
-    const next = applyRoutingPlan()
+    const next = applyRoutingPlan(preferences)
     setRoutingReport(next)
+    setSketchCleared(null)
+  }
+
+  const handleClearSketch = () => {
+    const result = clearSketch()
+    setSketchCleared(result.removed)
+    setRoutingReport(null)
   }
 
   const handleDownload = (filename: string, content: string, type: string) => {
@@ -624,14 +646,45 @@ function VentilationContent() {
                     Эскиз П/В → сеть по нормам (СП 54/СП 60), одна undo-команда
                   </p>
                 </div>
-                <button
-                  className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-2.5 py-1.5 font-medium text-xs text-violet-100 transition-colors hover:bg-violet-500/30 disabled:cursor-default disabled:opacity-40"
-                  onClick={handleRouting}
-                  type="button"
-                >
-                  Трассировка
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    className="rounded-md border border-border/40 bg-background/60 px-2 py-1.5 font-medium text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={handleClearSketch}
+                    title="Удалить эскиз (полилинии) одной командой — «Очистить эскиз»"
+                    type="button"
+                  >
+                    <Eraser className="mr-1 inline h-3 w-3" />
+                    Очистить эскиз
+                  </button>
+                  <button
+                    className="rounded-md border border-violet-400/40 bg-violet-500/20 px-2.5 py-1.5 font-medium text-xs text-violet-100 transition-colors hover:bg-violet-500/30 disabled:cursor-default disabled:opacity-40"
+                    onClick={handleRouting}
+                    type="button"
+                  >
+                    Трассировка
+                  </button>
+                </div>
               </div>
+
+              {/* W5: перед повторной сборкой предупреждаем, что прошлая пересоздаётся. */}
+              {agentBuiltCount > 0 && (
+                <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[10px] text-amber-200">
+                  <span className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    Повторная «Трассировка» пересоздаст {agentBuiltCount} узлов прошлой сборки —
+                    ручные правки этих трасс будут потеряны (один undo-шаг).
+                  </span>
+                </div>
+              )}
+
+              {sketchCleared !== null && (
+                <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] text-emerald-200">
+                  <span className="flex items-center gap-1.5">
+                    <Check className="h-3 w-3 shrink-0" />
+                    Эскиз очищен: удалено полилиний — {sketchCleared}.
+                  </span>
+                </div>
+              )}
 
               {routingReport?.status === 'no-sketch' && (
                 <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-200">
@@ -701,6 +754,156 @@ function VentilationContent() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border/45 bg-background/75">
+              <div className="flex items-center gap-2 px-2.5 py-2">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                <button
+                  className="flex-1 text-left font-medium text-xs"
+                  onClick={() => setShowPreferences((value) => !value)}
+                  type="button"
+                >
+                  Предпочтения трассировки
+                </button>
+                <span className="text-[10px] text-muted-foreground">
+                  аналог Revit Routing Prefs
+                </span>
+              </div>
+
+              {showPreferences && (
+                <div className="space-y-2 border-t border-border/40 p-2.5">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Врезка ответвления
+                      <select
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        value={prefs.branchFitting}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            branchFitting: event.target
+                              .value as RoutingPreferences['branchFitting'],
+                          }))
+                        }
+                      >
+                        <option value="auto">Авто (по d/D)</option>
+                        <option value="tee">Тройник</option>
+                        <option value="saddle">Седелка</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Угол врезки
+                      <select
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        value={prefs.branchTapAngleDeg}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            branchTapAngleDeg: event.target.value === '90' ? 90 : 45,
+                          }))
+                        }
+                      >
+                        <option value={45}>45° (меньше потерь)</option>
+                        <option value={90}>90°</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Радиус отводов R/D
+                      <select
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        value={prefs.elbowRadiusFactor}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            elbowRadiusFactor: Number(event.target.value),
+                          }))
+                        }
+                      >
+                        <option value={1}>1D (короткий)</option>
+                        <option value={1.5}>1.5D (стандарт)</option>
+                        <option value={2}>2D</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Метод подбора
+                      <select
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        value={prefs.sizingMethod}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            sizingMethod: event.target.value as RoutingPreferences['sizingMethod'],
+                          }))
+                        }
+                      >
+                        <option value="velocity-sp60">Скорость СП 60</option>
+                        <option value="equal-friction">Равные потери</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Допуск терминала, м
+                      <input
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        type="number"
+                        min={0.05}
+                        max={5}
+                        step={0.1}
+                        value={prefs.terminalConnectToleranceM}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            terminalConnectToleranceM: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-muted-foreground">
+                      Зазор утки, мм
+                      <input
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        type="number"
+                        min={20}
+                        max={500}
+                        step={10}
+                        value={prefs.bypassGapMm}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            bypassGapMm: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+                  </div>
+                  {prefs.sizingMethod === 'equal-friction' && (
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                      Цель удельных потерь, Па/м
+                      <input
+                        className="rounded-md border border-border/40 bg-background/80 px-1.5 py-1 text-foreground"
+                        type="number"
+                        min={0.1}
+                        max={10}
+                        step={0.1}
+                        value={prefs.equalFrictionPaPerM}
+                        onChange={(event) =>
+                          setPreferences((value) => ({
+                            ...value,
+                            equalFrictionPaPerM: Number(event.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+                  )}
+                  <button
+                    className="rounded-md border border-border/40 bg-background/60 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setPreferences({ ...DEFAULT_ROUTING_PREFERENCES })}
+                    type="button"
+                  >
+                    Сбросить к умолчаниям
+                  </button>
                 </div>
               )}
             </div>
