@@ -96,6 +96,10 @@ export function RoomUnifiedPanel({ zone, x, y }: { zone: ZoneNode; x: number; y:
     <div
       className="fixed z-50 max-h-[70vh] w-80 overflow-y-auto rounded-lg border border-border/60 bg-background/95 p-3 shadow-lg backdrop-blur-xl"
       data-room-panel=""
+      onContextMenu={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
       style={{
         left: Math.min(x, window.innerWidth - 340),
         top: Math.min(y, window.innerHeight - 80),

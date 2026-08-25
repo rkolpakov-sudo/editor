@@ -41,6 +41,21 @@ export function FloorplanZoneContextMenu() {
     setAnchor({ nodeId, x: clientX, y: clientY })
   }, [])
 
+  // Пока меню открыто, выделение комнаты не должно сбрасываться: если оно
+  // очистилось в тот же кадр (обработчики кликов/фокуса), возвращаем
+  // выделение на комнату (только при пустом выделении — выбор другого узла
+  // не трогаем).
+  useEffect(() => {
+    if (!anchor) return
+    const unsub = useViewer.subscribe(() => {
+      const current = useViewer.getState().selection.selectedIds
+      if (current.length === 0) {
+        useViewer.getState().setSelection({ selectedIds: [anchor.nodeId] })
+      }
+    })
+    return unsub
+  }, [anchor])
+
   // Кликабельная заливка зоны обрабатывает правый клик в registry-слое
   // (эмитит floorplan:node-context-menu) — открываем по нему панель.
   useEffect(() => {
